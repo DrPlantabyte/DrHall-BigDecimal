@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::*;
 use std::borrow::Borrow;
+use break_eternity::BreakEternityError::ParseError;
 
 #[derive(Clone, Eq, PartialOrd, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -69,11 +70,42 @@ impl BigInt {
 			}
 		}
 	}
-
 	pub fn from_str(s: &str) -> Result<BigInt, errors::ParseError> {
+		return from_localized_str(s, '.', vec![',', '_']);
+	}
+	pub fn from_localized_str(s: &str, decimal_char: char, separator_chars: Vec<char>)
+			-> Result<BigInt, errors::ParseError> {
 		let text = s.trim();
-		let digits: Vec<u8> = Vec::with_capacity(text.len());
-		todo!
+		let mut digits: Vec<u8> = Vec::with_capacity(text.len());
+		let mut sign: Option<bool> = None;
+		for c in text.chars().rev() {
+			if separator_chars.contains(&c){
+				// do nothing
+				continue;
+			} else if c == decimal_char {
+				// decimal place!
+				return Err(errors::ParseError::new(text, "BigInt"));
+			} else if sign.is_some() {
+				// more digits in front of minus sign?
+				return Err(errors::ParseError::new(text, "BigInt"));
+			}
+			match c {
+				'0' => digits.push(0u8),
+				'1' => digits.push(1u8),
+				'2' => digits.push(2u8),
+				'3' => digits.push(3u8),
+				'4' => digits.push(4u8),
+				'5' => digits.push(5u8),
+				'6' => digits.push(6u8),
+				'7' => digits.push(7u8),
+				'8' => digits.push(8u8),
+				'9' => digits.push(9u8),
+				'-' => sign = Some(false), // if not the end of the iterator, next iter will err
+				'–' => sign = Some(false), // figure dash, in case you copy-paste from Word
+				_ => return Err(errors::ParseError::new(text, "BigInt"))
+			}
+		}
+		return Ok(BigInt{digits:digits, positive: sign.unwrap_or(true)});
 	}
 
 	pub fn from_u8(i: u8) -> BigInt {
@@ -345,7 +377,7 @@ impl BigInt {
 	// safe-division
 	pub fn checked_div_rem(&self, rhs: &Self) -> Result<(Self,Self),errors::MathError> {
 		if rhs.is_zero() {
-			Err(errors::MathError{msg: String::from("cannot divide by zero")})
+			return Err(errors::MathError::new("cannot divide by zero"));
 		}
 		if self == rhs {
 			return Ok((Self::one(), Self::zero()));
@@ -370,7 +402,7 @@ impl BigInt {
 		//    ____
 		//  a) b
 		while a_digits.len() % 4 != 0 {a_digits.push(0);} // normalize A
-		if b_digits.len().is_odd() {b_digits.push(0);} // normalize B
+		if (b_digits.len() as u64).is_odd() {b_digits.push(0);} // normalize B
 		let max_out_digits = (a_digits.len() as isize - b_digits.len() as isize + 1) as usize;
 		let (q_digits, r_digits) = burnikel_ziegler_division(a_digits, b_digits, max_out_digits);
 		return Ok((BigInt{digits: q_digits, positive: positive},BigInt{digits: r_digits,
@@ -404,7 +436,7 @@ impl BigInt {
 	fn slice2(v: &[u8]) -> (&[u8],&[u8]) {
 		let w = v.len();
 		let h = w / 2;
-		return (v[0..h], v[h..w]);
+		return (&v[0..h], &v[h..w]);
 	}
 	fn merge2(v1: &[u8], v2: &[u8]) -> Vec<u8> {
 		let mut v: Vec<u8> = Vec::with_capacity(v1.len() + v2.len());
@@ -438,18 +470,18 @@ impl BigInt {
 		return (q, r);
 	}
 	fn concat_bigint(a1: &BigInt, a2: &BigInt) -> BigInt{
-		return BigInt{digits: merge2(a1)}
+		return BigInt{digits: merge2(a1), positive:a1.positive};
 	}
 	fn div_three_long_halves_by_two(a1: &BigInt, a2: &BigInt, a3: &BigInt, b1: &BigInt, b2: &BigInt)
 		-> (BigInt, BigInt) {
-		let a12 = concat_bigint(a1, a2);
-		let (mut q, mut c) = recursive_division(a12, n);
-		let d = q*(b2 as i16);
-		let mut r = (c*10 + (a3 as i16)) - d;
-		while r < 0 { // negative r means q too big
-			q -= 1;
-			r += b;
-		}
+		// let a12 = concat_bigint(a1, a2);
+		// let (mut q, mut c) = recursive_division(a12, n);
+		// let d = q*(b2 as i16);
+		// let mut r = (c*10 + (a3 as i16)) - d;
+		// while r < 0 { // negative r means q too big
+		// 	q -= 1;
+		// 	r += b;
+		// }
 		todo!()
 	}
 	fn div_two_wholes_by_one(a1: u8, a2: u8, a3: u8, a4: u8, b1: u8, b2: u8) -> (u8, u8) {
@@ -483,7 +515,7 @@ impl Div for BigInt {
 		if rhs.is_zero() {
 			panic!("attempt to divide by zero");
 		}
-		return self.checked_div(rhs).unwrap();
+		return self.checked_div_rem(&rhs).unwrap().0;
 	}
 }
 impl DivAssign for BigInt {
@@ -2493,6 +2525,12 @@ pub mod errors {
 		invalid_input: String,
 		type_name: String
 	}
+	impl ParseError{
+		pub fn new(invalid_input: &str, type_name: &str) -> ParseError{
+			return ParseError{invalid_input:String::from(invalid_input),
+				type_name:String::from(type_name)};
+		}
+	}
 
 	impl Display for ParseError{
 		fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -2509,6 +2547,12 @@ pub mod errors {
 		dest_name: String,
 		explain: String
 	}
+	impl InvalidConversionError{
+		pub fn new(source_name: &str, dest_name: &str, explain: &str) -> InvalidConversionError{
+			return InvalidConversionError{source_name:String::from(source_name),
+				dest_name:String::from(dest_name), explain:String::from(explain)};
+		}
+	}
 
 	impl Display for InvalidConversionError{
 		fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -2522,7 +2566,12 @@ pub mod errors {
 
 	#[derive(Debug, PartialEq)]
 	pub struct MathError {
-		pub msg: String
+		msg: String
+	}
+	impl MathError{
+		pub fn new(msg: &str) -> MathError{
+			return MathError{msg:String::from(msg)};
+		}
 	}
 
 	impl Display for MathError{
@@ -2537,7 +2586,7 @@ pub mod errors {
 
 #[cfg(test)]
 mod tests {
-	use crate::BigInt;
+	use crate::*;
 	use std::collections::HashMap;
 
 	#[test]
@@ -2571,6 +2620,43 @@ mod tests {
 		let result = BigInt::from_str(" 1234567890\r\n");
 		println!("{}", result.unwrap()); // should NOT error
 	}
+
+	#[test]
+	fn long_division_test() {
+		for n in 0..10000 {
+			for d in 0..100{
+				let qq: i32 = n / d;
+				let rr: i32 = n % d;
+				let a1 = n / 1000;      let a2 = (n / 100) % 10;
+				let a3 = (n / 10) % 10; let a4 = n % 10;
+				let b1 = d / 10; let b2 = d % 10;
+				let (q, r) = BigInt::div_two_wholes_by_one(
+					a1 as u8, a2 as u8, a3 as u8, a4 as u8,
+					b1 as u8, b1 as u8
+				);
+				let qqp = (n / 10) / d;
+				let rrp = (n / 10) % d;
+				let (qp, rp) = BigInt::div_three_halfs_by_two(
+					a1 as u8, a2 as u8, a3 as u8,
+					b1 as u8, b1 as u8
+				);
+
+				assert_eq!(qp as i32, qqp,"{}/{} does not equal div_three_halfs_by_two({}, {}, {}, \
+						   {}, {}).0", n/10, d, a1 as u8, a2 as u8, a3 as u8,
+								   b1 as u8, b1 as u8);
+				assert_eq!(rp as i32, rrp,"{}%{} does not equal div_three_halfs_by_two({}, {}, {}, \
+						   {}, {}).1", n/10, d, a1 as u8, a2 as u8, a3 as u8,
+								   b1 as u8, b1 as u8);
+				assert_eq!(q as i32, qq,"{}/{} does not equal div_two_wholes_by_one({}, {}, {}, {}, \
+						   {}, {}).0", n, d, a1 as u8, a2 as u8, a3 as u8, a4 as u8,
+								   b1 as u8, b1 as u8);
+				assert_eq!(r as i32, rr,"{}%{} does not equal div_two_wholes_by_one({}, {}, {}, {}, \
+						   {}, {}).1", n, d, a1 as u8, a2 as u8, a3 as u8, a4 as u8,
+								   b1 as u8, b1 as u8);
+			}
+		}
+	}
+
 	#[test]
 	fn bigint_operator_test() {
 		let i1 = BigInt::from_str("1234567890987654321").unwrap();

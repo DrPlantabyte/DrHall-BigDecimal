@@ -400,19 +400,14 @@ impl BigInt {
 		// (see Burnikel and Ziegler's 1998 paper)
 		//    ____
 		//  a) b
-		while a_digits.len() % 4 != 0 {a_digits.push(0);} // normalize A
-		if BigInt::is_usize_odd(&b_digits.len()) {b_digits.push(0);} // normalize B
-		let max_out_digits = (a_digits.len() as isize - b_digits.len() as isize + 1) as usize;
-		let (q_digits, r_digits) = BigInt::burnikel_ziegler_division(&a_digits, &b_digits, max_out_digits);
-		return Ok((BigInt{digits: q_digits, positive: positive},BigInt{digits: r_digits,
-			positive: true}));
+		todo!()
 	}
 
 	fn is_usize_odd(u: &usize) -> bool {
 		return u & 0x01 == 1;
 	}
 
-	fn burnikel_ziegler_division(number: &Vec<u8>, divisor: &Vec<u8>, n: usize) -> (Vec<u8>, Vec<u8>) {
+	fn burnikel_ziegler_division_3(number: &Vec<u8>, divisor: &Vec<u8>) -> (Vec<u8>, Vec<u8>) {
 
 		todo!() // return quotient and remainder
 	}
@@ -2627,7 +2622,7 @@ mod tests {
 	}
 
 	#[test]
-	fn long_division_test() {
+	fn long_division_test_1() {
 		for n in 0..10000 {
 			for d in 1..100{
 				let qq: i32 = n / d;

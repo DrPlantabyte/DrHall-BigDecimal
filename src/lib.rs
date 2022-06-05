@@ -71,7 +71,9 @@ impl BigInt {
 	}
 
 	pub fn from_str(s: &str) -> Result<BigInt, errors::ParseError> {
-		todo!()
+		let text = s.trim();
+		let digits: Vec<u8> = Vec::with_capacity(text.len());
+		todo!
 	}
 
 	pub fn from_u8(i: u8) -> BigInt {
@@ -341,33 +343,38 @@ impl MulAssign for BigInt {
 
 impl BigInt {
 	// safe-division
-	pub fn checked_div(&self, rhs: &Self) -> Result<Self,errors::MathError> {
+	pub fn checked_div_rem(&self, rhs: &Self) -> Result<(Self,Self),errors::MathError> {
 		if rhs.is_zero() {
 			Err(errors::MathError{msg: String::from("cannot divide by zero")})
 		}
 		if self == rhs {
-			return Ok(Self::one());
+			return Ok((Self::one(), Self::zero()));
 		}
 		let a = self.abs();
 		let b = rhs.abs();
 		if a == b {
-			return Ok(Self::neg_one());
+			return Ok((Self::neg_one(), Self::zero()));
 		} else if a < b {
-			return Ok(Self::zero());
+			return Ok((Self::zero(), a));
 		}
 		let positive = a.positive == b.positive;
-		let a_digits = a.digits;
-		let b_digits = b.digits;
+		let mut a_digits = a.digits.clone();
+		let mut b_digits = b.digits.clone();
 		if a_digits.len() < 9 {
 			// small enough to use i32 integer division
-			let (q, _r) = simple_division_32bit(a_digits, b_digits);
-			return Ok(BigInt::from_i32(q).convert_sign(positive));
+			let (q, r) = simple_division_32bit(a_digits, b_digits);
+			return Ok((BigInt::from_i32(q).convert_sign(positive), BigInt::from_i32(r)));
 		}
 		// time for long division, oh boy!
 		// (see Burnikel and Ziegler's 1998 paper)
 		//    ____
 		//  a) b
-		todo!()
+		while a_digits.len() % 4 != 0 {a_digits.push(0);} // normalize A
+		if b_digits.len().is_odd() {b_digits.push(0);} // normalize B
+		let max_out_digits = (a_digits.len() as isize - b_digits.len() as isize + 1) as usize;
+		let (q_digits, r_digits) = burnikel_ziegler_division(a_digits, b_digits, max_out_digits);
+		return Ok((BigInt{digits: q_digits, positive: positive},BigInt{digits: r_digits,
+			positive: true}));
 	}
 
 	fn burnikel_ziegler_division(n: &Vec<u8>, d: &Vec<u8>) -> (Vec<u8>, Vec<u8>) {
@@ -375,40 +382,75 @@ impl BigInt {
 		todo!() // return quotient and remainder
 	}
 
-	fn recusive_division(a_digits: &Vec<u8>, b_digits: &Vec<u8>, n: usize) -> (Vec<u8>, Vec<u8>){
+	fn recursive_division(a_digits: &[u8], b_digits: &[u8], n: usize) -> (Vec<u8>, Vec<u8>){
 		const DIV_LIMIT: usize = 4;
-		if n < DIV_LIMIT || n.is_odd(){
-			let (mut q32, mut r32) = simple_division_32bit(a_digits, b_digits);
-			let mut q: Vec<u8> = Vec::new();
-			let mut r: Vec<u8> = Vec::new();
-			while q32 > 0 {
-				q.push(q32 % 10);
-				q32 / 10;
-			}
-			while r32 > 0 {
-				r.push(r32 % 10);
-				r32 / 10;
-			}
+		if n < DIV_LIMIT { // || n.is_odd() ?
+			let (q32, r32) = simple_division_32bit(a_digits, b_digits);
+			let q = i32_to_vec_u8(q32);
+			let r = i32_to_vec_u8(r32);
 			return (q, r);
 		} else {
-			
+			let (b1, b2) = slice2(b_digits);
+			let (a12, a34) = slice2(a_digits);
+			let (a1, a2) = slice2(a12);
+			let (a3, a4) = slice2(a34);
+			let (q1, r) = div_three_long_halves_by_two(a1, a2, a3, b1, b2, n/2);
+			let (r1, r2) = slice2(r.as_slice());
+			let (q2, s) = div_three_long_halves_by_two(r1, r2, a4, b1, b2, n/2);
+			let q = merge2(q2, q1);
+			return (q, s);
 		}
-		todo!()
+	}
+	fn slice2(v: &[u8]) -> (&[u8],&[u8]) {
+		let w = v.len();
+		let h = w / 2;
+		return (v[0..h], v[h..w]);
+	}
+	fn merge2(v1: &[u8], v2: &[u8]) -> Vec<u8> {
+		let mut v: Vec<u8> = Vec::with_capacity(v1.len() + v2.len());
+		v.append(&mut v1.to_vec());
+		v.append(&mut v2.to_vec());
+		return v;
+	}
+	fn i32_to_vec_u8(integer: i32) -> Vec<u8>{
+		let mut i = integer;
+		let mut v: Vec<u8> = Vec::with_capacity(10);
+		while i > 0 {
+			v.push((i % 10) as u8);
+			i = i / 10;
+		}
+		return v;
+	}
+	fn vec_u8_to_i32(v: &vec<u8>) -> i32 {
+		let mut integer: i32 = 0;
+		for i in (0..v.len() as usize).rev() {
+			integer = integer * 10 + v[i];
+		}
+		return integer;
 	}
 	fn simple_division_32bit(a_digits: &Vec<u8>, b_digits: &Vec<u8>) -> (i32, i32) {
 		assert!(a_digits.len() < 9 && b_digits.len() < 9);
 		// small enough to use i32 integer division
-		let mut n: i32 = 0;
-		for i in (0..a_digits.len()).rev() {
-			n = n * 10 + a_digits[i];
-		}
-		let mut d: i32 = 0;
-		for i in (0..b_digits.len()).rev() {
-			d = d * 10 + b_digits[i];
-		}
+		let n = vec_u8_to_i32(a_digits);
+		let d = vec_u8_to_i32(b_digits);
 		let q = n / d;
 		let r = n % d;
 		return (q, r);
+	}
+	fn concat_bigint(a1: &BigInt, a2: &BigInt) -> BigInt{
+		return BigInt{digits: merge2(a1)}
+	}
+	fn div_three_long_halves_by_two(a1: &BigInt, a2: &BigInt, a3: &BigInt, b1: &BigInt, b2: &BigInt)
+		-> (BigInt, BigInt) {
+		let a12 = concat_bigint(a1, a2);
+		let (mut q, mut c) = recursive_division(a12, n);
+		let d = q*(b2 as i16);
+		let mut r = (c*10 + (a3 as i16)) - d;
+		while r < 0 { // negative r means q too big
+			q -= 1;
+			r += b;
+		}
+		todo!()
 	}
 	fn div_two_wholes_by_one(a1: u8, a2: u8, a3: u8, a4: u8, b1: u8, b2: u8) -> (u8, u8) {
 		let ah = (a1 * 10 + a2);

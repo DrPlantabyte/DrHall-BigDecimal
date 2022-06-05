@@ -378,8 +378,20 @@ impl BigInt {
 	fn recusive_division(a_digits: &Vec<u8>, b_digits: &Vec<u8>, n: usize) -> (Vec<u8>, Vec<u8>){
 		const DIV_LIMIT: usize = 4;
 		if n < DIV_LIMIT || n.is_odd(){
-			let (q32, r32) = simple_division_32bit(a_digits, b_digits);
+			let (mut q32, mut r32) = simple_division_32bit(a_digits, b_digits);
 			let mut q: Vec<u8> = Vec::new();
+			let mut r: Vec<u8> = Vec::new();
+			while q32 > 0 {
+				q.push(q32 % 10);
+				q32 / 10;
+			}
+			while r32 > 0 {
+				r.push(r32 % 10);
+				r32 / 10;
+			}
+			return (q, r);
+		} else {
+			
 		}
 		todo!()
 	}

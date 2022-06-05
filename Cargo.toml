@@ -1,0 +1,19 @@
+[package]
+name = "drhall-bigdecimal"
+version = "0.0.1"
+edition = "2021"
+authors = ["Christopher Collin Hall"]
+description = """A simple implementation of integers and decimal numbers of arbitrary precision (aka `BigInt` and `BigDecimal`)"""
+license = "LGPL"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# none
+[dev-dependencies]
+serde="1"
+rand="0.8"
+bigdecimal = "0.3"
+break-eternity = "0.1"
+bigdecimalmath = "0.1"
+big_num = "0.1"

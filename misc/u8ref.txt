@@ -1,0 +1,191 @@
+impl PartialEq<u8> for BigInt {
+	fn eq(&self, other: &u8) -> bool {
+		todo!()
+	}
+}
+impl PartialEq<BigInt> for u8 {
+	fn eq(&self, other: &BigInt) -> bool {
+		todo!()
+	}
+}
+impl Add<u8> for BigInt {
+	type Output = Self;
+	fn add(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Add<BigInt> for u8 {
+	type Output = BigInt;
+	fn add(self, rhs: BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl AddAssign<u8> for BigInt {
+	fn add_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Sub<u8> for BigInt {
+	type Output = Self;
+	fn sub(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Sub<BigInt> for u8 {
+	type Output = BigInt;
+	fn sub(self, rhs: BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl SubAssign<u8> for BigInt {
+	fn sub_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Mul<u8> for BigInt {
+	type Output = Self;
+	fn mul(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Mul<BigInt> for u8 {
+	type Output = BigInt;
+	fn mul(self, rhs: BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl MulAssign<u8> for BigInt {
+	fn mul_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Div<u8> for BigInt {
+	type Output = Self;
+	fn div(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Div<BigInt> for u8 {
+	type Output = BigInt;
+	fn div(self, rhs: BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl DivAssign<u8> for BigInt {
+	fn div_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Rem<u8> for BigInt {
+	type Output = Self;
+	fn rem(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Rem<BigInt> for u8 {
+	type Output = BigInt;
+	fn rem(self, rhs: BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl RemAssign<u8> for BigInt {
+	fn rem_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl PartialEq<u8> for &BigInt {
+	fn eq(&self, other: &u8) -> bool {
+		todo!()
+	}
+}
+impl PartialEq<&BigInt> for u8 {
+	fn eq(&self, other: &&BigInt) -> bool {
+		todo!()
+	}
+}
+impl Add<u8> for &BigInt {
+	type Output = Self;
+	fn add(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Add<&BigInt> for u8 {
+	type Output = BigInt;
+	fn add(self, rhs: &BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl AddAssign<u8> for &BigInt {
+	fn add_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Sub<u8> for &BigInt {
+	type Output = Self;
+	fn sub(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Sub<&BigInt> for u8 {
+	type Output = BigInt;
+	fn sub(self, rhs: &BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl SubAssign<u8> for &BigInt {
+	fn sub_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Mul<u8> for &BigInt {
+	type Output = Self;
+	fn mul(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Mul<&BigInt> for u8 {
+	type Output = BigInt;
+	fn mul(self, rhs: &BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl MulAssign<u8> for &BigInt {
+	fn mul_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Div<u8> for &BigInt {
+	type Output = Self;
+	fn div(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Div<&BigInt> for u8 {
+	type Output = BigInt;
+	fn div(self, rhs: &BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl DivAssign<u8> for &BigInt {
+	fn div_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+impl Rem<u8> for &BigInt {
+	type Output = Self;
+	fn rem(self, rhs: u8) -> Self {
+		todo!()
+	}
+}
+impl Rem<&BigInt> for u8 {
+	type Output = BigInt;
+	fn rem(self, rhs: &BigInt) -> BigInt {
+		todo!()
+	}
+}
+impl RemAssign<u8> for &BigInt {
+	fn rem_assign(&mut self, rhs: u8) {
+		todo!()
+	}
+}
+

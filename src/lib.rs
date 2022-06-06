@@ -407,9 +407,75 @@ impl BigInt {
 		return u & 0x01 == 1;
 	}
 
-	fn burnikel_ziegler_division_3(number: &Vec<u8>, divisor: &Vec<u8>) -> (Vec<u8>, Vec<u8>) {
+	#[allow(non_snake_case)]
+	fn burnikel_ziegler_division_3(A: &Vec<u8>, B: &Vec<u8>) -> (Vec<u8>, Vec<u8>) {
+		// do recursive integer division A/B and return (quotient, remainder)
+		let r = A.len() as i64;
+		let s = B.len() as i64;
+		if r < s {
+			// A smaller than B
+			return (vec![0u8], A.clone());
+		}
+		/*
+	"The main idea is to split up A into parts which are as long as B and to view these
+parts as (very large) digits. Then we can conceptually apply an ordinary school division
+to these large digits in which the base task of dividing two digits by one is carried out by
+RecursiveDivision. The divisor for RecursiveDivision is always B and the dividend is
+always the composition of the current remainder and the next digit of A. Figure 2 illustrates
+the method.
+	First we conceptually divide B into m so called \division blocks" of DIV_LIMIT digits each.
+We compute m as the minimal 2k that is greater or equal than the number of division blocks of
+B. In other words, k will be the depth of the recursion applied to B in RecursiveDivision.
+We have to extend B to a number that has m*DIV_LIMIT digits. Note that the topmost
+recursive call will work no matter how big DIV_LIMIT actually is, i.e., we can try to minimize
+the number of digits in each division block (at least conceptually) as long as the overall
+number of digits of the m division blocks is greater or equal than the number of digits of
+B. This trick will minimize the number of 0s we waste when extending B and leave us with
+smaller numbers in the base case of the recursion; our tests have indicated that we gain a
+speedup of 25% in running time. So we compute n = m * j with j minimal such that n is
+greater or equal than s. Then we extend B from the right to n digits. B has to be shifted
+bitwise again for normalization until its most signicant digit fulfills bn-1 >= beta/2. Note that
+A has also to be extended and shifted by the same amount.
+	Then we conceptually divide A into t division blocks of length n each. The division we
+will carry out will then conceptually be a school division of a t-block number by a 1-block
+number (here the term \block" stands for a very large block of digits, namely for n digits).
+This is a particularly simple type of school division since the divisor consists of only one
+block, which now plays the role of a single digit. No backmultiplication is needed, so school
+division becomes a linear time algorithm in the number of blocks."
+- Burnikel & Ziegler, 1998*/
+		const DIV_LIMIT: i64 = 10;
+		// m is smallest power of 2 that is at least as big as the number of DIV_LIMIT blocks in B
+		// (m = 2^k)
+		let k = BigInt::log2_i64(s/DIV_LIMIT);
+		let m = 1i64 << k; // m number of blocks
+		let j = (s+m - 1) / m; // j is size of smallest chunk in B to contain B using m blocks
+		let n = j * m; // n total digits for B (right-pad with 0)
+		let sigma = n-s; // sigma number of zeros to right-pad
+		let Bn = BigInt::right_pad(B, sigma as usize, 0u8);
+		let An = BigInt::right_pad(A, sigma as usize, 0u8);
+		let t = (1 + (r/n)).max(2); // t is number of n-sized blocked needed to hold A with an extra 0 on the left
 
 		todo!() // return quotient and remainder
+	}
+
+	fn right_pad(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
+		let mut out: Vec<u8> = Vec::with_capacity(v.len() + pad_count);
+		for _ in 0..pad_count{
+			out.push(pad);
+		}
+		for d in v{
+			out.push(*d);
+		}
+		return out;
+	}
+	fn log2_i64(n: i64) -> i64{
+		let mut l2: i64 = 0;
+		let mut p: i64 = 1;
+		while p < n {
+			p = p << 1;
+			l2 += 1;
+		}
+		return l2;
 	}
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8], n: usize) -> (Vec<u8>, Vec<u8>){

@@ -312,7 +312,9 @@ impl Add for BigInt {
 			// opposite signs: compute delta and return delta with sign of bigger (abs) number
 			let a = self.abs();
 			let b = rhs.abs();
-			if a >= b {
+			if a == b {
+				return BigInt::zero();
+			}else if a >= b {
 				let delta = a.sub(b);
 				return delta.convert_sign(self.positive);
 			} else {
@@ -464,7 +466,7 @@ division becomes a linear time algorithm in the number of blocks."
 		for i in (0..t-2).rev() {
 			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
 			// TODO: push Qi to front of Q or directly to final position
-			R = Ri;
+			R = Ri.clone();
 			if i > 0 {
 				Z_double_block.clear();
 				Z_double_block.extend(Ri);
@@ -496,23 +498,40 @@ division becomes a linear time algorithm in the number of blocks."
 	}
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
+		let n = a_digits.len();
 		if (n as i64) < BigInt::BZ_DIV_LIMIT { // || n.is_odd() ?
 			let (q64, r64) = BigInt::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
 			let q = BigInt::i64_to_vec_u8(q64);
 			let r = BigInt::i64_to_vec_u8(r64);
 			return (q, r);
-		} else {/*
+		} else {
 			let (b1, b2) = BigInt::slice2(b_digits);
 			let (a12, a34) = BigInt::slice2(a_digits);
 			let (a1, a2) = BigInt::slice2(a12);
 			let (a3, a4) = BigInt::slice2(a34);
-			let (q1, r) = BigInt::div_three_long_halves_by_two(a1, a2, a3, b1, b2, n/2);
-			let (r1, r2) = BigInt::slice2(r.as_slice());
-			let (q2, s) = BigInt::div_three_long_halves_by_two(r1, r2, a4, b1, b2, n/2);
-			let q = BigInt::merge2(q2, q1);
-			return (q, s);*/
-			todo!()
+			let (q1, r) = BigInt::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
+			let (r1, r2) = BigInt::slice2(&r.digits);
+			let (q2, s) = BigInt::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
+			let q = BigInt::merge2(&q2.digits, &q1.digits);
+			return (q, s.digits);
 		}
+	}
+	fn div_three_long_halves_by_two(a1: &[u8], a2: &[u8], a3: &[u8], b1: &[u8], b2: &[u8])
+			-> (BigInt, BigInt) {
+		let a12 = BigInt::merge2(a1, a2);
+		let b = BigInt{digits: BigInt::merge2(b1, b2), positive: true};
+		let (mut q, mut c) = BigInt::recursive_division(&a12, b1);
+		let mut qnum = BigInt{digits: q, positive:true};
+		let b2num = BigInt{digits: b2.to_vec(), positive:true};
+		let cnum = BigInt{digits: c, positive:true};
+		let a3num = BigInt{digits: a3.to_vec(), positive:true};
+		let d = &qnum*&b2num;
+		let mut r = (cnum*10i32 + a3num) - d;
+		while !r.positive { // negative r means q too big
+			qnum -= 1i32;
+			r += b.clone();
+		}
+		return (qnum.clone(), r);
 	}
 	fn slice2(v: &[u8]) -> (&[u8],&[u8]) {
 		let w = v.len();
@@ -552,18 +571,6 @@ division becomes a linear time algorithm in the number of blocks."
 	}
 	fn concat_bigint(a1: &BigInt, a2: &BigInt) -> BigInt{
 		return BigInt{digits: BigInt::merge2(&a1.digits, &a2.digits), positive:a1.positive};
-	}
-	fn div_three_long_halves_by_two(a1: &BigInt, a2: &BigInt, a3: &BigInt, b1: &BigInt, b2: &BigInt, n: usize)
-		-> (BigInt, BigInt) {
-		// let a12 = concat_bigint(a1, a2);
-		// let (mut q, mut c) = recursive_division(a12, n);
-		// let d = q*(b2 as i16);
-		// let mut r = (c*10 + (a3 as i16)) - d;
-		// while r < 0 { // negative r means q too big
-		// 	q -= 1;
-		// 	r += b;
-		// }
-		todo!()
 	}
 	fn div_two_wholes_by_one(a1: u8, a2: u8, a3: u8, a4: u8, b1: u8, b2: u8) -> (u8, u8) {
 		let ah = (a1 * 10 + a2);

@@ -373,6 +373,7 @@ impl MulAssign for BigInt {
 }
 
 impl BigInt {
+	const BZ_DIV_LIMIT: i64 = 18;
 	// safe-division
 	pub fn checked_div_rem(&self, rhs: &Self) -> Result<(Self,Self),errors::MathError> {
 		if rhs.is_zero() {
@@ -392,9 +393,9 @@ impl BigInt {
 		let mut a_digits = a.digits.clone();
 		let mut b_digits = b.digits.clone();
 		if a_digits.len() < 9 {
-			// small enough to use i32 integer division
-			let (q, r) = BigInt::simple_division_32bit(&a_digits, &b_digits);
-			return Ok((BigInt::from_i32(q).convert_sign(positive), BigInt::from_i32(r)));
+			// small enough to use i64 integer division
+			let (q, r) = BigInt::simple_division_64bit(&a_digits, &b_digits);
+			return Ok((BigInt::from_i64(q).convert_sign(positive), BigInt::from_i64(r)));
 		}
 		// time for long division, oh boy!
 		// (see Burnikel and Ziegler's 1998 paper)
@@ -408,13 +409,13 @@ impl BigInt {
 	}
 
 	#[allow(non_snake_case)]
-	fn burnikel_ziegler_division_3(A: &Vec<u8>, B: &Vec<u8>) -> (Vec<u8>, Vec<u8>) {
+	fn burnikel_ziegler_division_3(A: &Vec<u8>, B: &Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), errors::MathError> {
 		// do recursive integer division A/B and return (quotient, remainder)
 		let r = A.len() as i64;
 		let s = B.len() as i64;
 		if r < s {
 			// A smaller than B
-			return (vec![0u8], A.clone());
+			return Ok((vec![0u8], A.clone()));
 		}
 		/*
 	"The main idea is to split up A into parts which are as long as B and to view these
@@ -443,18 +444,31 @@ This is a particularly simple type of school division since the divisor consists
 block, which now plays the role of a single digit. No backmultiplication is needed, so school
 division becomes a linear time algorithm in the number of blocks."
 - Burnikel & Ziegler, 1998*/
-		const DIV_LIMIT: i64 = 10;
 		// m is smallest power of 2 that is at least as big as the number of DIV_LIMIT blocks in B
 		// (m = 2^k)
-		let k = BigInt::log2_i64(s/DIV_LIMIT);
+		let k = BigInt::log2_i64(s/BigInt::BZ_DIV_LIMIT);
+		if k > 62 { return Err(errors::MathError::new(&format!("cannot compute division because algorithm cannot handle {} digits", s)));}
 		let m = 1i64 << k; // m number of blocks
 		let j = (s+m - 1) / m; // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
 		let sigma = n-s; // sigma number of zeros to right-pad
-		let Bn = BigInt::right_pad(B, sigma as usize, 0u8);
-		let An = BigInt::right_pad(A, sigma as usize, 0u8);
-		let t = (1 + (r/n)).max(2); // t is number of n-sized blocked needed to hold A with an extra 0 on the left
-
+		let B = BigInt::right_pad(B, sigma as usize, 0u8);
+		let mut A = BigInt::right_pad(A, sigma as usize, 0u8);
+		let t = (1 + (r/n)).max(2); // tt is number of n-sized blocked needed to hold A with an extra 0 on the left
+		while (A.len() as i64) < t*n { // left-pad A with zeros
+			A.push(0u8);
+		}
+		let mut A_block = &A[((t-1)*n) as usize .. ((t)*n) as usize];
+		let mut Z_double_block = A[((t-2)*n) as usize .. ((t)*n) as usize].to_vec(); // Z initialized as upper two blocks od A
+		let Q: Vec<u8> = Vec::with_capacity(s); // TODO: change to calculation of max possible output digits 
+		for i in (0..t-2).rev() {
+			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
+			if i > 0 {
+				Z_double_block.clear();
+				Z_double_block.extend(Ri);
+				Z_double_block.extend(&A[((i-1)*n) as usize .. ((i)*n) as usize])
+			}
+		}
 		todo!() // return quotient and remainder
 	}
 
@@ -478,12 +492,11 @@ division becomes a linear time algorithm in the number of blocks."
 		return l2;
 	}
 
-	fn recursive_division(a_digits: &[u8], b_digits: &[u8], n: usize) -> (Vec<u8>, Vec<u8>){
-		const DIV_LIMIT: usize = 4;
-		if n < DIV_LIMIT { // || n.is_odd() ?
-			let (q32, r32) = BigInt::simple_division_32bit(&a_digits.to_vec(), &b_digits.to_vec());
-			let q = BigInt::i32_to_vec_u8(q32);
-			let r = BigInt::i32_to_vec_u8(r32);
+	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
+		if (n as i64) < BigInt::BZ_DIV_LIMIT { // || n.is_odd() ?
+			let (q64, r64) = BigInt::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
+			let q = BigInt::i64_to_vec_u8(q64);
+			let r = BigInt::i64_to_vec_u8(r64);
 			return (q, r);
 		} else {/*
 			let (b1, b2) = BigInt::slice2(b_digits);
@@ -509,27 +522,27 @@ division becomes a linear time algorithm in the number of blocks."
 		v.append(&mut v2.to_vec());
 		return v;
 	}
-	fn i32_to_vec_u8(integer: i32) -> Vec<u8>{
+	fn i64_to_vec_u8(integer: i64) -> Vec<u8>{
 		let mut i = integer;
-		let mut v: Vec<u8> = Vec::with_capacity(10);
+		let mut v: Vec<u8> = Vec::with_capacity(19);
 		while i > 0 {
 			v.push((i % 10) as u8);
 			i = i / 10;
 		}
 		return v;
 	}
-	fn vec_u8_to_i32(v: &Vec<u8>) -> i32 {
-		let mut integer: i32 = 0;
+	fn vec_u8_to_i64(v: &Vec<u8>) -> i64 {
+		let mut integer: i64 = 0;
 		for i in (0..v.len() as usize).rev() {
-			integer = integer * 10 + v[i] as i32;
+			integer = integer * 10 + v[i] as i64;
 		}
 		return integer;
 	}
-	fn simple_division_32bit(a_digits: &Vec<u8>, b_digits: &Vec<u8>) -> (i32, i32) {
-		assert!(a_digits.len() < 9 && b_digits.len() < 9);
+	fn simple_division_64bit(a_digits: &Vec<u8>, b_digits: &Vec<u8>) -> (i64, i64) {
+		assert!(a_digits.len() < 19 && b_digits.len() < 19);
 		// small enough to use i32 integer division
-		let n = BigInt::vec_u8_to_i32(a_digits);
-		let d = BigInt::vec_u8_to_i32(b_digits);
+		let n = BigInt::vec_u8_to_i64(a_digits);
+		let d = BigInt::vec_u8_to_i64(b_digits);
 		let q = n / d;
 		let r = n % d;
 		return (q, r);
@@ -2689,6 +2702,12 @@ mod tests {
 
 	#[test]
 	fn long_division_test_1() {
+		let (q, r) = BigInt::simple_division_64bit(&vec![6,4,3,2,1], &vec![3,0,3]);
+		assert_eq!(q, 64321i64 / 303i64);
+		assert_eq!(r, 64321i64 % 303i64);
+		let (q, r) = BigInt::simple_division_64bit(&vec![6,1,3,4,5,9,9,5,2,2,2,3,2,0,0,0,1], &vec![3,0,3,7,6,1,2,3,4,5,1,7]);
+		assert_eq!(q, 61345995222320001i64 / 303761234517i64);
+		assert_eq!(r, 61345995222320001i64 % 303761234517i64);
 		for n in 0..10000 {
 			for d in 1..100{
 				let qq: i32 = n / d;

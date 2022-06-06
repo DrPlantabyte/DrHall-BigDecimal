@@ -458,17 +458,20 @@ division becomes a linear time algorithm in the number of blocks."
 		while (A.len() as i64) < t*n { // left-pad A with zeros
 			A.push(0u8);
 		}
-		let mut A_block = &A[((t-1)*n) as usize .. ((t)*n) as usize];
 		let mut Z_double_block = A[((t-2)*n) as usize .. ((t)*n) as usize].to_vec(); // Z initialized as upper two blocks od A
-		let Q: Vec<u8> = Vec::with_capacity(s); // TODO: change to calculation of max possible output digits 
+		let mut Q: Vec<u8> = Vec::with_capacity((r-s+1) as usize);
+		let mut R: Vec<u8> = Vec::with_capacity((s) as usize);
 		for i in (0..t-2).rev() {
 			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
+			// TODO: push Qi to front of Q or directly to final position
+			R = Ri;
 			if i > 0 {
 				Z_double_block.clear();
 				Z_double_block.extend(Ri);
 				Z_double_block.extend(&A[((i-1)*n) as usize .. ((i)*n) as usize])
 			}
 		}
+
 		todo!() // return quotient and remainder
 	}
 

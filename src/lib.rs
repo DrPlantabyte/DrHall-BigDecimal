@@ -601,33 +601,6 @@ division becomes a linear time algorithm in the number of blocks."
 		let r = n % d;
 		return (q, r);
 	}
-	fn concat_bigint(a1: &BigInt, a2: &BigInt) -> BigInt{
-		return BigInt{digits: BigInt::merge2(&a1.digits, &a2.digits), positive:a1.positive};
-	}
-	fn div_two_wholes_by_one(a1: u8, a2: u8, a3: u8, a4: u8, b1: u8, b2: u8) -> (u8, u8) {
-		let ah = (a1 * 10 + a2);
-		let al = (a3 * 10 + a4);
-		let bb = (b1 * 10 + b2);
-		let (q1, r) = BigInt::div_three_halfs_by_two(a1, a2, a3, b1, b2);
-		let r1 = r/10; let r2 = r % 10;
-		let (q2, s) = BigInt::div_three_halfs_by_two(r1, r2, a4, b1, b2);
-		let q = (q1 * 10 + q2);
-		return (q, s);
-
-	}
-	fn div_three_halfs_by_two(a1: u8, a2: u8, a3: u8, b1: u8, b2: u8) -> (u8, u8){
-		let b = (b1*10 + b2) as i16;
-		let a12 = (a1*10 + a2) as i16;
-		let mut q = a12/(b1 as i16);
-		let c = a12 - q*(b1 as i16);
-		let d = q*(b2 as i16);
-		let mut r = (c*10 + (a3 as i16)) - d;
-		while r < 0 { // negative r means q too big
-			q -= 1;
-			r += b;
-		}
-		return (q as u8, r as u8);
-	}
 }
 
 impl Div for BigInt {

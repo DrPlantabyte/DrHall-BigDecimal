@@ -388,6 +388,104 @@ impl MulAssign for BigInt {
 	}
 }
 
+
+
+impl Div for BigInt {
+	type Output = Self;
+	fn div(self, rhs: Self) -> Self::Output {
+		if rhs.is_zero() {
+			panic!("attempt to divide by zero");
+		}
+		return self.checked_div_rem(&rhs).unwrap().0;
+	}
+}
+impl DivAssign for BigInt {
+	fn div_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().div(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+impl Rem for BigInt {
+	type Output = Self;
+	fn rem(self, rhs: Self) -> Self::Output {
+		if rhs.is_zero() {
+			panic!("attempt to calculate remainder of divide by zero");
+		}
+		return self.checked_div_rem(&rhs).unwrap().1;
+	}
+}
+impl RemAssign for BigInt {
+	fn rem_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().rem(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+
+impl Neg for &BigInt {
+	type Output = BigInt;
+	fn neg(self) -> BigInt {
+		return self.clone().neg();
+	}
+}
+impl Add for &BigInt {
+	type Output = BigInt;
+	fn add(self, rhs: Self) -> BigInt {
+		return self.clone().add(rhs);
+	}
+}
+impl AddAssign for &BigInt {
+	fn add_assign(&mut self, rhs: Self) {
+		(*self).add_assign(rhs);
+	}
+}
+impl Sub for &BigInt {
+	type Output = BigInt;
+	fn sub(self, rhs: Self) -> BigInt {
+		return self.clone().sub(rhs);
+	}
+}
+impl SubAssign for &BigInt {
+	fn sub_assign(&mut self, rhs: Self) {
+		(*self).sub_assign(rhs);
+	}
+}
+impl Mul for &BigInt {
+	type Output = BigInt;
+	fn mul(self, rhs: Self) -> BigInt {
+		return self.clone().mul(rhs);
+	}
+}
+impl MulAssign for &BigInt {
+	fn mul_assign(&mut self, rhs: Self) {
+		(*self).mul_assign(rhs);
+	}
+}
+impl Div for &BigInt {
+	type Output = BigInt;
+	fn div(self, rhs: Self) -> BigInt {
+		return self.clone().div(rhs);
+	}
+}
+impl DivAssign for &BigInt {
+	fn div_assign(&mut self, rhs: Self) {
+		(*self).div_assign(rhs);
+	}
+}
+impl Rem for &BigInt {
+	type Output = BigInt;
+	fn rem(self, rhs: Self) -> BigInt {
+		return self.clone().rem(rhs);
+	}
+}
+impl RemAssign for &BigInt {
+	fn rem_assign(&mut self, rhs: Self) {
+		(*self).rem_assign(rhs);
+	}
+}
+
+
 impl BigInt {
 	const BZ_DIV_LIMIT: i64 = 18;
 	// safe-division
@@ -470,8 +568,8 @@ division becomes a linear time algorithm in the number of blocks."
 		let j = (s+m - 1) / m; // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
 		let sigma = n-s; // sigma number of zeros to right-pad
-		let B = BigInt::right_pad(B, sigma as usize, 0u8);
-		let mut A = BigInt::right_pad(A, sigma as usize, 0u8);
+		let B = BigInt::left_shift(B, sigma as usize, 0u8);
+		let mut A = BigInt::left_shift(A, sigma as usize, 0u8);
 		let t = (1 + (r/n)).max(2); // tt is number of n-sized blocked needed to hold A with an extra 0 on the left
 		while (A.len() as i64) < t*n { // left-pad A with zeros
 			A.push(0u8);
@@ -491,8 +589,10 @@ division becomes a linear time algorithm in the number of blocks."
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
+		// trim leading zeroes
 		BigInt::trim_leading_zeroes(&mut Q);
 		BigInt::trim_leading_zeroes(&mut R);
+		// done!
 		return Ok((Q, R));
 	}
 
@@ -503,7 +603,7 @@ division becomes a linear time algorithm in the number of blocks."
 			let (q64, r64) = BigInt::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
 			let q = BigInt::i64_to_vec_u8(q64);
 			let r = BigInt::i64_to_vec_u8(r64);
-			return (q, r);
+			return (BigInt::left_pad(&q, n, 0u8), BigInt::left_pad(&r, n, 0u8));
 		} else {
 			let (b2, b1) = BigInt::slice2(b_digits);
 			let (a34, a12) = BigInt::slice2(a_digits);
@@ -534,7 +634,7 @@ division becomes a linear time algorithm in the number of blocks."
 		return (qnum.clone(), r);
 	}
 
-	fn right_pad(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
+	fn left_shift(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
 		let mut out: Vec<u8> = Vec::with_capacity(v.len() + pad_count);
 		for _ in 0..pad_count{
 			out.push(pad);
@@ -543,6 +643,13 @@ division becomes a linear time algorithm in the number of blocks."
 			out.push(*d);
 		}
 		return out;
+	}
+	fn left_pad(v: &Vec<u8>, final_size: usize, pad: u8) -> Vec<u8> {
+		let mut v2 = v.clone();
+		while v2.len() < final_size {
+			v2.push(pad);
+		}
+		return v2;
 	}
 	fn log2_i64(n: i64) -> i64{
 		let mut l2: i64 = 0;
@@ -598,99 +705,6 @@ division becomes a linear time algorithm in the number of blocks."
 		return (q, r);
 	}
 }
-
-impl Div for BigInt {
-	type Output = Self;
-	fn div(self, rhs: Self) -> Self::Output {
-		if rhs.is_zero() {
-			panic!("attempt to divide by zero");
-		}
-		return self.checked_div_rem(&rhs).unwrap().0;
-	}
-}
-impl DivAssign for BigInt {
-	fn div_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().div(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-impl Rem for BigInt {
-	type Output = Self;
-	fn rem(self, rhs: Self) -> Self::Output {
-		todo!()
-	}
-}
-impl RemAssign for BigInt {
-	fn rem_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().rem(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-
-impl Neg for &BigInt {
-	type Output = BigInt;
-	fn neg(self) -> BigInt {
-		todo!()
-	}
-}
-impl Add for &BigInt {
-	type Output = BigInt;
-	fn add(self, rhs: Self) -> BigInt {
-		todo!()
-	}
-}
-impl AddAssign for &BigInt {
-	fn add_assign(&mut self, rhs: Self) {
-		todo!()
-	}
-}
-impl Sub for &BigInt {
-	type Output = BigInt;
-	fn sub(self, rhs: Self) -> BigInt {
-		todo!()
-	}
-}
-impl SubAssign for &BigInt {
-	fn sub_assign(&mut self, rhs: Self) {
-		todo!()
-	}
-}
-impl Mul for &BigInt {
-	type Output = BigInt;
-	fn mul(self, rhs: Self) -> BigInt {
-		todo!()
-	}
-}
-impl MulAssign for &BigInt {
-	fn mul_assign(&mut self, rhs: Self) {
-		todo!()
-	}
-}
-impl Div for &BigInt {
-	type Output = BigInt;
-	fn div(self, rhs: Self) -> BigInt {
-		todo!()
-	}
-}
-impl DivAssign for &BigInt {
-	fn div_assign(&mut self, rhs: Self) {
-		todo!()
-	}
-}
-impl Rem for &BigInt {
-	type Output = BigInt;
-	fn rem(self, rhs: Self) -> BigInt {
-		todo!()
-	}
-}
-impl RemAssign for &BigInt {
-	fn rem_assign(&mut self, rhs: Self) {
-		todo!()
-	}
-}
-
 
 
 // IMPLEMENTATION FOR INTERACTION WITH NATIVE INT TYPES //

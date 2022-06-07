@@ -159,6 +159,20 @@ impl BigInt {
 		let unsigned = Self::from_u128(i.abs() as u128);
 		return BigInt{digits: unsigned.digits, positive: i >= 0}
 	}
+
+	fn trim_leading_zeroes(digits: &mut Vec<u8>) {
+		if digits.len() == 1 {
+			return;
+		}
+		for i in (1..digits.len()).rev() {
+			if digits[i] != 0u8 {
+				// [i] not zero, trim everything above i
+				digits.truncate(i+1);
+				break;
+			}
+		}
+
+	}
 }
 impl From<u8> for BigInt {
 	fn from(i: u8) -> Self {
@@ -391,19 +405,20 @@ impl BigInt {
 		} else if a < b {
 			return Ok((Self::zero(), a));
 		}
-		let positive = a.positive == b.positive;
+		let sign = a.positive == b.positive;
 		let mut a_digits = a.digits.clone();
 		let mut b_digits = b.digits.clone();
 		if a_digits.len() < 9 {
 			// small enough to use i64 integer division
 			let (q, r) = BigInt::simple_division_64bit(&a_digits, &b_digits);
-			return Ok((BigInt::from_i64(q).convert_sign(positive), BigInt::from_i64(r)));
+			return Ok((BigInt::from_i64(q).convert_sign(sign), BigInt::from_i64(r)));
 		}
 		// time for long division, oh boy!
 		// (see Burnikel and Ziegler's 1998 paper)
 		//    ____
 		//  a) b
-		todo!()
+		let (q, r) = BigInt::burnikel_ziegler_division(&a_digits, &b_digits)?;
+		return Ok((BigInt{digits: q, positive: sign}, BigInt{digits: r, positive: true}))
 	}
 
 	fn is_usize_odd(u: &usize) -> bool {
@@ -411,7 +426,7 @@ impl BigInt {
 	}
 
 	#[allow(non_snake_case)]
-	fn burnikel_ziegler_division_3(A: &Vec<u8>, B: &Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), errors::MathError> {
+	fn burnikel_ziegler_division(A: &Vec<u8>, B: &Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), errors::MathError> {
 		// do recursive integer division A/B and return (quotient, remainder)
 		let r = A.len() as i64;
 		let s = B.len() as i64;
@@ -465,7 +480,8 @@ division becomes a linear time algorithm in the number of blocks."
 		let mut R: Vec<u8> = Vec::with_capacity((s) as usize);
 		for i in (0..t-2).rev() {
 			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
-			// TODO: push Qi to front of Q or directly to final position
+			// push Qi to front of Q
+			BigInt::push_front(&mut Q, &Qi);
 			R = Ri.clone();
 			if i > 0 {
 				Z_double_block.clear();
@@ -473,29 +489,13 @@ division becomes a linear time algorithm in the number of blocks."
 				Z_double_block.extend(&A[((i-1)*n) as usize .. ((i)*n) as usize])
 			}
 		}
-
-		todo!() // return quotient and remainder
+		// right-shift remainder back
+		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
+		BigInt::trim_leading_zeroes(&mut Q);
+		BigInt::trim_leading_zeroes(&mut R);
+		return Ok((Q, R));
 	}
 
-	fn right_pad(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
-		let mut out: Vec<u8> = Vec::with_capacity(v.len() + pad_count);
-		for _ in 0..pad_count{
-			out.push(pad);
-		}
-		for d in v{
-			out.push(*d);
-		}
-		return out;
-	}
-	fn log2_i64(n: i64) -> i64{
-		let mut l2: i64 = 0;
-		let mut p: i64 = 1;
-		while p < n {
-			p = p << 1;
-			l2 += 1;
-		}
-		return l2;
-	}
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
 		let n = a_digits.len();
@@ -532,6 +532,38 @@ division becomes a linear time algorithm in the number of blocks."
 			r += b.clone();
 		}
 		return (qnum.clone(), r);
+	}
+
+	fn right_pad(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
+		let mut out: Vec<u8> = Vec::with_capacity(v.len() + pad_count);
+		for _ in 0..pad_count{
+			out.push(pad);
+		}
+		for d in v{
+			out.push(*d);
+		}
+		return out;
+	}
+	fn log2_i64(n: i64) -> i64{
+		let mut l2: i64 = 0;
+		let mut p: i64 = 1;
+		while p < n {
+			p = p << 1;
+			l2 += 1;
+		}
+		return l2;
+	}
+	fn write_into_vec(dst: &mut Vec<u8>, src: &[u8], pos: usize){
+		while dst.len() < pos + src.len() {
+			dst.push(0u8);
+		}
+		for i in 0..src.len() {
+			dst[i+pos] = src[i];
+		}
+	}
+	fn push_front(dst: &mut Vec<u8>, src: &[u8]){
+		dst.extend(dst.clone());
+		BigInt::write_into_vec(dst, src, 0);
 	}
 	fn slice2(v: &[u8]) -> (&[u8],&[u8]) {
 		let w = v.len();
@@ -2712,44 +2744,25 @@ mod tests {
 
 	#[test]
 	fn long_division_test_1() {
-		let (q, r) = BigInt::simple_division_64bit(&vec![6,4,3,2,1], &vec![3,0,3]);
+		// remember, index 0 is ones' digit (least significant digit first, aka little-endian)
+		let (q, r) = BigInt::simple_division_64bit(&vec![1,2,3,4,6], &vec![3,0,3]);
 		assert_eq!(q, 64321i64 / 303i64);
 		assert_eq!(r, 64321i64 % 303i64);
-		let (q, r) = BigInt::simple_division_64bit(&vec![6,1,3,4,5,9,9,5,2,2,2,3,2,0,0,0,1], &vec![3,0,3,7,6,1,2,3,4,5,1,7]);
+		let (q, r) = BigInt::simple_division_64bit(&vec![1,0,0,0,2,3,2,2,2,5,9,9,5,4,3,1,6], &vec![7,1,5,4,3,2,1,6,7,3,0,3]);
 		assert_eq!(q, 61345995222320001i64 / 303761234517i64);
 		assert_eq!(r, 61345995222320001i64 % 303761234517i64);
-		for n in 0..10000 {
-			for d in 1..100{
-				let qq: i32 = n / d;
-				let rr: i32 = n % d;
-				let a1 = n / 1000;      let a2 = (n / 100) % 10;
-				let a3 = (n / 10) % 10; let a4 = n % 10;
-				let b1 = d / 10; let b2 = d % 10;
-				let (q, r) = BigInt::div_two_wholes_by_one(
-					a1 as u8, a2 as u8, a3 as u8, a4 as u8,
-					b1 as u8, b1 as u8
-				);
-				let qqp = (n / 10) / d;
-				let rrp = (n / 10) % d;
-				let (qp, rp) = BigInt::div_three_halfs_by_two(
-					a1 as u8, a2 as u8, a3 as u8,
-					b1 as u8, b1 as u8
-				);
-
-				assert_eq!(qp as i32, qqp,"{}/{} does not equal div_three_halfs_by_two({}, {}, {}, \
-						   {}, {}).0", n/10, d, a1 as u8, a2 as u8, a3 as u8,
-								   b1 as u8, b1 as u8);
-				assert_eq!(rp as i32, rrp,"{}%{} does not equal div_three_halfs_by_two({}, {}, {}, \
-						   {}, {}).1", n/10, d, a1 as u8, a2 as u8, a3 as u8,
-								   b1 as u8, b1 as u8);
-				assert_eq!(q as i32, qq,"{}/{} does not equal div_two_wholes_by_one({}, {}, {}, {}, \
-						   {}, {}).0", n, d, a1 as u8, a2 as u8, a3 as u8, a4 as u8,
-								   b1 as u8, b1 as u8);
-				assert_eq!(r as i32, rr,"{}%{} does not equal div_two_wholes_by_one({}, {}, {}, {}, \
-						   {}, {}).1", n, d, a1 as u8, a2 as u8, a3 as u8, a4 as u8,
-								   b1 as u8, b1 as u8);
-			}
-		}
+		// n = 2011175439743600021634000000000000000000000000000586423463
+		let n = vec![3,6,4,3,2,4,6,8,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,6,1,2,0,0,0,6,3,4,7,9,3,4,5,7,1,1,1,0,2];
+		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![7,1]).unwrap().0,
+				   vec![3,3,7,3,8,0,5,0,5,6,7,1,1,4,9,2,5,3,2,8,8,5,0,7,4,6,7,1,1,4,9,2,5,3,2,8,0,6,8,1,7,4,6,7,9,1,3,6,7,3,4,4,0,3,8,1,1]);
+		// divide by 17 = 118304437631976471860823529411764705882352941176505083733
+		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![7,1]).unwrap().1, vec![2]); // mod by 17 = 2
+		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![2,1,4,9,3,0,0,0,0,2,9,0,4,8,3,7,6,9,4,3,7,1]).unwrap().0,
+				   vec![2,9,1,0,1,6,8,0,7,4,2,9,0,0,0,8,4,7,0,4,7,1,1,9,1,8,3,9,1,7,0,0,2,9,5,1,1]);
+		// divide by 1734967384092000039412 = 1159200719381911740748000924708610192
+		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![2,1,4,9,3,0,0,0,0,2,9,0,4,8,3,7,6,9,4,3,7,1]).unwrap().1,
+				   vec![9,5,3,6,3,5,1,4,8,0,2,7,9,8,6,7,1,6,6,7,4,1]);
+		// mod by 1734967384092000039412 = 1476617689720841536359
 	}
 
 	#[test]
@@ -2900,6 +2913,13 @@ mod tests {
 		assert_eq!(map.get(&BigInt::from_i32(5)).unwrap().to_string(), "55555");
 		assert!(map.get(&BigInt::from_i32(6)).is_none());
 		assert!(map.get(&BigInt::from_i32(-5)).is_none());
+	}
+	#[test]
+	fn bigint_trim_leading_zeroes(){
+		let mut before: Vec<u8> = vec![0,1,2,3,4,5,0,0,0];
+		let after: Vec<u8> = vec![0,1,2,3,4,5];
+		BigInt::trim_leading_zeroes(&mut before);
+		assert_eq!(before, after, "trim_leading_zeroes failure: {:?} not equal to {:?}", before, after);
 	}
 }
 

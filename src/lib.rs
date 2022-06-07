@@ -427,6 +427,7 @@ impl BigInt {
 
 	#[allow(non_snake_case)]
 	fn burnikel_ziegler_division(A: &Vec<u8>, B: &Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), errors::MathError> {
+		// NOTE: vec<u8>[0] is LEAST SIGNIFICANT DIGIT, not most significant digit
 		// do recursive integer division A/B and return (quotient, remainder)
 		let r = A.len() as i64;
 		let s = B.len() as i64;
@@ -481,12 +482,11 @@ division becomes a linear time algorithm in the number of blocks."
 		for i in (0..t-2).rev() {
 			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
 			// push Qi to front of Q
-			BigInt::push_front(&mut Q, &Qi);
+			Q = BigInt::merge2(&Qi, &Q);
 			R = Ri.clone();
 			if i > 0 {
-				Z_double_block.clear();
-				Z_double_block.extend(Ri);
-				Z_double_block.extend(&A[((i-1)*n) as usize .. ((i)*n) as usize])
+				// make new double-block with remainder as upper digits
+				Z_double_block = BigInt::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
 		}
 		// right-shift remainder back
@@ -505,12 +505,12 @@ division becomes a linear time algorithm in the number of blocks."
 			let r = BigInt::i64_to_vec_u8(r64);
 			return (q, r);
 		} else {
-			let (b1, b2) = BigInt::slice2(b_digits);
-			let (a12, a34) = BigInt::slice2(a_digits);
-			let (a1, a2) = BigInt::slice2(a12);
-			let (a3, a4) = BigInt::slice2(a34);
+			let (b2, b1) = BigInt::slice2(b_digits);
+			let (a34, a12) = BigInt::slice2(a_digits);
+			let (a2, a1) = BigInt::slice2(a12);
+			let (a4, a3) = BigInt::slice2(a34);
 			let (q1, r) = BigInt::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
-			let (r1, r2) = BigInt::slice2(&r.digits);
+			let (r2, r1) = BigInt::slice2(&r.digits);
 			let (q2, s) = BigInt::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
 			let q = BigInt::merge2(&q2.digits, &q1.digits);
 			return (q, s.digits);
@@ -518,8 +518,8 @@ division becomes a linear time algorithm in the number of blocks."
 	}
 	fn div_three_long_halves_by_two(a1: &[u8], a2: &[u8], a3: &[u8], b1: &[u8], b2: &[u8])
 			-> (BigInt, BigInt) {
-		let a12 = BigInt::merge2(a1, a2);
-		let b = BigInt{digits: BigInt::merge2(b1, b2), positive: true};
+		let a12 = BigInt::merge2(a2, a1);
+		let b = BigInt{digits: BigInt::merge2(b2, b1), positive: true};
 		let (mut q, mut c) = BigInt::recursive_division(&a12, b1);
 		let mut qnum = BigInt{digits: q, positive:true};
 		let b2num = BigInt{digits: b2.to_vec(), positive:true};
@@ -560,10 +560,6 @@ division becomes a linear time algorithm in the number of blocks."
 		for i in 0..src.len() {
 			dst[i+pos] = src[i];
 		}
-	}
-	fn push_front(dst: &mut Vec<u8>, src: &[u8]){
-		dst.extend(dst.clone());
-		BigInt::write_into_vec(dst, src, 0);
 	}
 	fn slice2(v: &[u8]) -> (&[u8],&[u8]) {
 		let w = v.len();

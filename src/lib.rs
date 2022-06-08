@@ -41,7 +41,7 @@ impl BigInt {
 
 	/// for internal use only, returns slice with leading zeroes trimmed off
 	fn get_nonzero_slice(&self) -> &[u8] {
-		let mut i = self.digits.len()-1;
+		let mut i = self.digits.len() as i64-1;
 		while i > 0 && self.digits[i] != 0u8 {
 			i -= 1;
 		}

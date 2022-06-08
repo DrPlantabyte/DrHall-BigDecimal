@@ -448,21 +448,36 @@ impl Mul for &BigInt {
 	type Output = BigInt;
 	fn mul(self, rhs: Self) -> BigInt {
 		let sign = self.positive == rhs.positive;
-		let count = self.digits.len().max(rhs.digits.len());
-		let mut new_digits: Vec<u8> = Vec::with_capacity(count+1);
-		let mut i = 0;
-		let mut carry: u8 = 0;
-		while i < count {
-			let a = self.digits.get(i).unwrap_or(&1u8);
-			let b = rhs.digits.get(i).unwrap_or(&1u8);
-			let product = a * b + carry;
-			new_digits.push(product % 10);
-			carry = product / 10;
-			i += 1;
+		let count = usize::max(self.digits.len(), rhs.digits.len());
+		if count < 9 {
+			// small enough for i64 multiply
+			return BigInt{digits: BigInt::i64_to_vec_u8(
+				BigInt::vec_u8_to_i64(&self.digits)
+				* BigInt::vec_u8_to_i64(&rhs.digits),
+			), positive: sign};
 		}
-		if carry != 0 {
-			new_digits.push(carry);
+		// too big, time to do it old-school
+		if rhs.digits.len() > self.digits.len(){
+			// reverse to make sure the left side has most digits
+			return rhs.mul(self);
 		}
+		let max_digits = self.digits.len()+rhs.digits.len();
+		let mut new_digits: Vec<u8> = Vec::with_capacity(max_digits);
+		for _ in 0..max_digits {new_digits.push(0u8);}
+		let mut carry: u8 = 0u8;
+		for bi in 0..rhs.digits.len() {
+			let base_digit = rhs.digits[bi];
+			for ai in 0..self.digits.len() {
+				let upper_digit = self.digits[ai];
+				let prod = upper_digit * base_digit + carry;
+				let p_digit = new_digits[ai+bi] + prod % 10;
+				new_digits[ai+bi] = p_digit % 10;
+				carry = prod / 10 + p_digit / 10;
+			}
+			new_digits[self.digits.len()+bi] += carry;
+			carry = 0;
+		}
+		BigInt::trim_leading_zeroes(&mut new_digits);
 		return BigInt{digits: new_digits, positive: sign};
 	}
 }
@@ -487,6 +502,7 @@ impl Rem for &BigInt {
 
 
 impl BigInt {
+	// division
 	const BZ_DIV_LIMIT: i64 = 18;
 	// safe-division
 	pub fn checked_div_rem(&self, rhs: &Self) -> Result<(Self,Self),errors::MathError> {

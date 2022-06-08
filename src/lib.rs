@@ -41,7 +41,10 @@ impl BigInt {
 
 	/// for internal use only, returns slice with leading zeroes trimmed off
 	fn get_nonzero_slice(&self) -> &[u8] {
-		let mut i = self.digits.len() as i64-1;
+		if self.digits.len() == 0 {
+			return &self.digits;
+		}
+		let mut i = self.digits.len()-1;
 		while i > 0 && self.digits[i] != 0u8 {
 			i -= 1;
 		}
@@ -123,7 +126,8 @@ impl BigInt {
 		return Self::from_i64(i as i64);
 	}
 	pub fn from_i32(i: i32) -> BigInt {
-		return Self::from_i64(i as i64);
+		let unsigned = Self::from_u64((i as i64).abs() as u64);
+		return BigInt{digits: unsigned.digits, positive: i >= 0}
 	}
 	pub fn from_u64(i: u64) -> BigInt {
 		let mut remainder = i;
@@ -139,8 +143,20 @@ impl BigInt {
 		return BigInt{digits: digs, positive: true}
 	}
 	pub fn from_i64(i: i64) -> BigInt {
-		let unsigned = Self::from_u64(i.abs() as u64);
-		return BigInt{digits: unsigned.digits, positive: i >= 0}
+		let mut remainder = i;
+		let mut digs: Vec<u8> = Vec::with_capacity(20);
+		// special handling to avoid .abs() overflow
+		digs.push(((remainder & 0x0F) % 10) as u8);
+		let mut remainder: u64 = (remainder / 10).abs() as u64;
+		while remainder >= 10{
+			let digit = remainder % 10;
+			digs.push(digit as u8);
+			remainder = remainder / 10;
+		}
+		if remainder != 0 {
+			digs.push(remainder as u8);
+		}
+		return BigInt{digits: digs, positive: i >= 0}
 	}
 	pub fn from_u128(i: u128) -> BigInt {
 		let mut remainder = i;
@@ -156,8 +172,20 @@ impl BigInt {
 		return BigInt{digits: digs, positive: true}
 	}
 	pub fn from_i128(i: i128) -> BigInt {
-		let unsigned = Self::from_u128(i.abs() as u128);
-		return BigInt{digits: unsigned.digits, positive: i >= 0}
+		let mut remainder = i;
+		let mut digs: Vec<u8> = Vec::with_capacity(39);
+		// special handling to avoid .abs() overflow
+		digs.push(((remainder & 0x0F) % 10) as u8);
+		let mut remainder: u128 = (remainder / 10).abs() as u128;
+		while remainder >= 10{
+			let digit = remainder % 10;
+			digs.push(digit as u8);
+			remainder = remainder / 10;
+		}
+		if remainder != 0 {
+			digs.push(remainder as u8);
+		}
+		return BigInt{digits: digs, positive: i >= 0}
 	}
 
 	fn trim_leading_zeroes(digits: &mut Vec<u8>) {
@@ -257,13 +285,14 @@ impl From<i128> for BigInt {
 
 impl Display for BigInt{
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		let mut text = String::with_capacity(self.digits.len()+1);
+		let mut digits = self.digits.clone();
+		BigInt::trim_leading_zeroes(& mut digits);
+		let mut text = String::with_capacity(digits.len()+1);
 		if !self.positive{
 			text.push('-');
 		}
-		for i in 0..self.digits.len() {
-			let reverse_index = self.digits.len() - i - 1;
-			text.push(std::char::from_digit(self.digits[reverse_index] as u32, 10)
+		for reverse_index in (0..digits.len()).rev() {
+			text.push(std::char::from_digit(digits[reverse_index] as u32, 10)
 				.ok_or(std::fmt::Error)?);
 		}
 		f.write_str(text.as_ref())
@@ -1726,7 +1755,7 @@ impl SubAssign<i32> for BigInt {
 impl Mul<i32> for BigInt {
 	type Output = Self;
 	fn mul(self, rhs: i32) -> Self {
-		todo!()
+		return self.mul(BigInt::from_i32(rhs));
 	}
 }
 impl Mul<BigInt> for i32 {

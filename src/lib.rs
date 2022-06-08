@@ -70,7 +70,7 @@ impl BigInt {
 		}
 	}
 	pub fn from_str(s: &str) -> Result<BigInt, errors::ParseError> {
-		return BigInt::from_localized_str(s, '.', vec![',', '_']);
+		return Self::from_localized_str(s, '.', vec![',', '_']);
 	}
 	pub fn from_localized_str(s: &str, decimal_char: char, separator_chars: Vec<char>)
 			-> Result<BigInt, errors::ParseError> {
@@ -172,6 +172,34 @@ impl BigInt {
 			}
 		}
 
+	}
+
+	fn delta(a: &BigInt, b: &BigInt) -> BigInt {
+		if b > a {return Self::delta(b, a);}
+		if a == b {return Self::zero();}
+		// a > b
+		let mut top = a.digits.clone();
+		let bottom = &b.digits;
+		let mut output: Vec<u8> = Vec::with_capacity(top.len());
+		for i in 0..top.len() {
+			let mut x = top[i];
+			if i < bottom.len() {
+				let y = bottom[i];
+				if y > x {
+					let mut ii = i+1;
+					while top[ii] == 0 {
+						top[ii] = 9u8;
+						ii += 1;
+					}
+					top[ii] = (top[ii] as i16 - 1i16) as u8;
+					x += 10;
+				}
+				output.push((x as i16 - y as i16) as u8);
+			} else {
+				output.push(x);
+			}
+		}
+		return BigInt{digits: output, positive: true};
 	}
 }
 impl From<u8> for BigInt {
@@ -298,12 +326,84 @@ impl Hash for BigInt{
 impl Neg for BigInt {
 	type Output = Self;
 	fn neg(self) -> Self {
-		return BigInt{digits: self.digits.clone(), positive: !self.positive};
+		return (&self).neg();
 	}
 }
 impl Add for BigInt {
 	type Output = Self;
 	fn add(self, rhs: Self) -> Self {
+		return (&self).add(&rhs);
+	}
+}
+impl AddAssign for BigInt {
+	fn add_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().add(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+impl Sub for BigInt {
+	type Output = Self;
+	fn sub(self, rhs: Self) -> Self {
+		return (&self).sub(&rhs);
+	}
+}
+impl SubAssign for BigInt {
+	fn sub_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().sub(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+impl Mul for BigInt {
+	type Output = Self;
+	fn mul(self, rhs: Self) -> Self::Output {
+		return (&self).mul(&rhs);
+	}
+}
+impl MulAssign for BigInt {
+	fn mul_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().mul(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+impl Div for BigInt {
+	type Output = Self;
+	fn div(self, rhs: Self) -> Self::Output {
+		return (&self).div(&rhs);
+	}
+}
+impl DivAssign for BigInt {
+	fn div_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().div(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+impl Rem for BigInt {
+	type Output = Self;
+	fn rem(self, rhs: Self) -> Self::Output {
+		return (&self).rem(&rhs);
+	}
+}
+impl RemAssign for BigInt {
+	fn rem_assign(&mut self, rhs: Self) {
+		let tmp = self.clone().rem(rhs);
+		self.digits = tmp.digits.clone();
+		self.positive = tmp.positive;
+	}
+}
+
+impl Neg for &BigInt {
+	type Output = BigInt;
+	fn neg(self) -> BigInt {
+		return BigInt{digits: self.digits.clone(), positive: !self.positive};
+	}
+}
+impl Add for &BigInt {
+	type Output = BigInt;
+	fn add(self, rhs: Self) -> BigInt {
 		if self.positive == rhs.positive {
 			// same sign
 			let count = self.digits.len().max(rhs.digits.len());
@@ -329,38 +429,24 @@ impl Add for BigInt {
 			if a == b {
 				return BigInt::zero();
 			}else if a >= b {
-				let delta = a.sub(b);
+				let delta = BigInt::delta(&a, &b);
 				return delta.convert_sign(self.positive);
 			} else {
-				let delta = b.sub(a);
+				let delta = BigInt::delta(&b, &a);
 				return delta.convert_sign(rhs.positive);
 			}
 		}
 	}
 }
-impl AddAssign for BigInt {
-	fn add_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().add(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
+impl Sub for &BigInt {
+	type Output = BigInt;
+	fn sub(self, rhs: Self) -> BigInt {
+		return self.add(&rhs.neg());
 	}
 }
-impl Sub for BigInt {
-	type Output = Self;
-	fn sub(self, rhs: Self) -> Self {
-		return self.add(rhs.neg());
-	}
-}
-impl SubAssign for BigInt {
-	fn sub_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().sub(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-impl Mul for BigInt {
-	type Output = Self;
-	fn mul(self, rhs: Self) -> Self::Output {
+impl Mul for &BigInt {
+	type Output = BigInt;
+	fn mul(self, rhs: Self) -> BigInt {
 		let sign = self.positive == rhs.positive;
 		let count = self.digits.len().max(rhs.digits.len());
 		let mut new_digits: Vec<u8> = Vec::with_capacity(count+1);
@@ -380,108 +466,22 @@ impl Mul for BigInt {
 		return BigInt{digits: new_digits, positive: sign};
 	}
 }
-impl MulAssign for BigInt {
-	fn mul_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().mul(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-
-
-
-impl Div for BigInt {
-	type Output = Self;
-	fn div(self, rhs: Self) -> Self::Output {
+impl Div for &BigInt {
+	type Output = BigInt;
+	fn div(self, rhs: Self) -> BigInt {
 		if rhs.is_zero() {
 			panic!("attempt to divide by zero");
 		}
 		return self.checked_div_rem(&rhs).unwrap().0;
 	}
 }
-impl DivAssign for BigInt {
-	fn div_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().div(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-impl Rem for BigInt {
-	type Output = Self;
-	fn rem(self, rhs: Self) -> Self::Output {
+impl Rem for &BigInt {
+	type Output = BigInt;
+	fn rem(self, rhs: Self) -> BigInt {
 		if rhs.is_zero() {
 			panic!("attempt to calculate remainder of divide by zero");
 		}
 		return self.checked_div_rem(&rhs).unwrap().1;
-	}
-}
-impl RemAssign for BigInt {
-	fn rem_assign(&mut self, rhs: Self) {
-		let tmp = self.clone().rem(rhs);
-		self.digits = tmp.digits.clone();
-		self.positive = tmp.positive;
-	}
-}
-
-impl Neg for &BigInt {
-	type Output = BigInt;
-	fn neg(self) -> BigInt {
-		return self.clone().neg();
-	}
-}
-impl Add for &BigInt {
-	type Output = BigInt;
-	fn add(self, rhs: Self) -> BigInt {
-		return self.clone().add(rhs);
-	}
-}
-impl AddAssign for &BigInt {
-	fn add_assign(&mut self, rhs: Self) {
-		(*self).add_assign(rhs);
-	}
-}
-impl Sub for &BigInt {
-	type Output = BigInt;
-	fn sub(self, rhs: Self) -> BigInt {
-		return self.clone().sub(rhs);
-	}
-}
-impl SubAssign for &BigInt {
-	fn sub_assign(&mut self, rhs: Self) {
-		(*self).sub_assign(rhs);
-	}
-}
-impl Mul for &BigInt {
-	type Output = BigInt;
-	fn mul(self, rhs: Self) -> BigInt {
-		return self.clone().mul(rhs);
-	}
-}
-impl MulAssign for &BigInt {
-	fn mul_assign(&mut self, rhs: Self) {
-		(*self).mul_assign(rhs);
-	}
-}
-impl Div for &BigInt {
-	type Output = BigInt;
-	fn div(self, rhs: Self) -> BigInt {
-		return self.clone().div(rhs);
-	}
-}
-impl DivAssign for &BigInt {
-	fn div_assign(&mut self, rhs: Self) {
-		(*self).div_assign(rhs);
-	}
-}
-impl Rem for &BigInt {
-	type Output = BigInt;
-	fn rem(self, rhs: Self) -> BigInt {
-		return self.clone().rem(rhs);
-	}
-}
-impl RemAssign for &BigInt {
-	fn rem_assign(&mut self, rhs: Self) {
-		(*self).rem_assign(rhs);
 	}
 }
 
@@ -508,14 +508,14 @@ impl BigInt {
 		let mut b_digits = b.digits.clone();
 		if a_digits.len() < 9 {
 			// small enough to use i64 integer division
-			let (q, r) = BigInt::simple_division_64bit(&a_digits, &b_digits);
-			return Ok((BigInt::from_i64(q).convert_sign(sign), BigInt::from_i64(r)));
+			let (q, r) = Self::simple_division_64bit(&a_digits, &b_digits);
+			return Ok((Self::from_i64(q).convert_sign(sign), Self::from_i64(r)));
 		}
 		// time for long division, oh boy!
 		// (see Burnikel and Ziegler's 1998 paper)
 		//    ____
 		//  a) b
-		let (q, r) = BigInt::burnikel_ziegler_division(&a_digits, &b_digits)?;
+		let (q, r) = Self::burnikel_ziegler_division(&a_digits, &b_digits)?;
 		return Ok((BigInt{digits: q, positive: sign}, BigInt{digits: r, positive: true}))
 	}
 
@@ -562,14 +562,14 @@ division becomes a linear time algorithm in the number of blocks."
 - Burnikel & Ziegler, 1998*/
 		// m is smallest power of 2 that is at least as big as the number of DIV_LIMIT blocks in B
 		// (m = 2^k)
-		let k = BigInt::log2_i64(s/BigInt::BZ_DIV_LIMIT);
+		let k = Self::log2_i64(s/Self::BZ_DIV_LIMIT);
 		if k > 62 { return Err(errors::MathError::new(&format!("cannot compute division because algorithm cannot handle {} digits", s)));}
 		let m = 1i64 << k; // m number of blocks
 		let j = (s+m - 1) / m; // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
 		let sigma = n-s; // sigma number of zeros to right-pad
-		let B = BigInt::left_shift(B, sigma as usize, 0u8);
-		let mut A = BigInt::left_shift(A, sigma as usize, 0u8);
+		let B = Self::left_shift(B, sigma as usize, 0u8);
+		let mut A = Self::left_shift(A, sigma as usize, 0u8);
 		let t = (1 + (r/n)).max(2); // tt is number of n-sized blocked needed to hold A with an extra 0 on the left
 		while (A.len() as i64) < t*n { // left-pad A with zeros
 			A.push(0u8);
@@ -578,20 +578,20 @@ division becomes a linear time algorithm in the number of blocks."
 		let mut Q: Vec<u8> = Vec::with_capacity((r-s+1) as usize);
 		let mut R: Vec<u8> = Vec::with_capacity((s) as usize);
 		for i in (0..t-2).rev() {
-			let (Qi, Ri) = BigInt::recursive_division(&Z_double_block, &B);
+			let (Qi, Ri) = Self::recursive_division(&Z_double_block, &B);
 			// push Qi to front of Q
-			Q = BigInt::merge2(&Qi, &Q);
+			Q = Self::merge2(&Qi, &Q);
 			R = Ri.clone();
 			if i > 0 {
 				// make new double-block with remainder as upper digits
-				Z_double_block = BigInt::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
+				Z_double_block = Self::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
 		// trim leading zeroes
-		BigInt::trim_leading_zeroes(&mut Q);
-		BigInt::trim_leading_zeroes(&mut R);
+		Self::trim_leading_zeroes(&mut Q);
+		Self::trim_leading_zeroes(&mut R);
 		// done!
 		return Ok((Q, R));
 	}
@@ -599,28 +599,28 @@ division becomes a linear time algorithm in the number of blocks."
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
 		let n = a_digits.len();
-		if (n as i64) < BigInt::BZ_DIV_LIMIT { // || n.is_odd() ?
-			let (q64, r64) = BigInt::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
-			let q = BigInt::i64_to_vec_u8(q64);
-			let r = BigInt::i64_to_vec_u8(r64);
-			return (BigInt::left_pad(&q, n, 0u8), BigInt::left_pad(&r, n, 0u8));
+		if (n as i64) < Self::BZ_DIV_LIMIT { // || n.is_odd() ?
+			let (q64, r64) = Self::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
+			let q = Self::i64_to_vec_u8(q64);
+			let r = Self::i64_to_vec_u8(r64);
+			return (Self::left_pad(&q, n, 0u8), Self::left_pad(&r, n, 0u8));
 		} else {
-			let (b2, b1) = BigInt::slice2(b_digits);
-			let (a34, a12) = BigInt::slice2(a_digits);
-			let (a2, a1) = BigInt::slice2(a12);
-			let (a4, a3) = BigInt::slice2(a34);
-			let (q1, r) = BigInt::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
-			let (r2, r1) = BigInt::slice2(&r.digits);
-			let (q2, s) = BigInt::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
-			let q = BigInt::merge2(&q2.digits, &q1.digits);
+			let (b2, b1) = Self::slice2(b_digits);
+			let (a34, a12) = Self::slice2(a_digits);
+			let (a2, a1) = Self::slice2(a12);
+			let (a4, a3) = Self::slice2(a34);
+			let (q1, r) = Self::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
+			let (r2, r1) = Self::slice2(&r.digits);
+			let (q2, s) = Self::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
+			let q = Self::merge2(&q2.digits, &q1.digits);
 			return (q, s.digits);
 		}
 	}
 	fn div_three_long_halves_by_two(a1: &[u8], a2: &[u8], a3: &[u8], b1: &[u8], b2: &[u8])
 			-> (BigInt, BigInt) {
-		let a12 = BigInt::merge2(a2, a1);
-		let b = BigInt{digits: BigInt::merge2(b2, b1), positive: true};
-		let (mut q, mut c) = BigInt::recursive_division(&a12, b1);
+		let a12 = Self::merge2(a2, a1);
+		let b = BigInt{digits: Self::merge2(b2, b1), positive: true};
+		let (mut q, mut c) = Self::recursive_division(&a12, b1);
 		let mut qnum = BigInt{digits: q, positive:true};
 		let b2num = BigInt{digits: b2.to_vec(), positive:true};
 		let cnum = BigInt{digits: c, positive:true};
@@ -698,8 +698,8 @@ division becomes a linear time algorithm in the number of blocks."
 	fn simple_division_64bit(a_digits: &Vec<u8>, b_digits: &Vec<u8>) -> (i64, i64) {
 		assert!(a_digits.len() < 19 && b_digits.len() < 19);
 		// small enough to use i32 integer division
-		let n = BigInt::vec_u8_to_i64(a_digits);
-		let d = BigInt::vec_u8_to_i64(b_digits);
+		let n = Self::vec_u8_to_i64(a_digits);
+		let d = Self::vec_u8_to_i64(b_digits);
 		let q = n / d;
 		let r = n % d;
 		return (q, r);
@@ -2752,23 +2752,32 @@ mod tests {
 	fn bigint_operator_test() {
 		let i1 = BigInt::from_str("1234567890987654321").unwrap();
 		let i2 = BigInt::from_str("0123456780876543210").unwrap();
+		println!("BigInt comparisons");
 		assert!(i1 > i2);
 		assert!(i2 < i1);
 		assert_ne!(i1, i2);
 		assert_ne!(i1, BigInt::from_str("-1234567890987654321").unwrap()); // sign check
+		println!("BigInt operators:");
+		println!("+");
 		assert_eq!(i1.clone() + i2.clone(), BigInt::from_str("1358024671864197531").unwrap());
 		assert_eq!(&i1 + &i2, BigInt::from_str("1358024671864197531").unwrap());
+		println!("-");
 		assert_eq!(i1.clone() - i2.clone(), BigInt::from_str("1111111110111111111").unwrap());
 		assert_eq!(&i1 - &i2, BigInt::from_str("1111111110111111111").unwrap());
+		println!("*");
 		assert_eq!(i1.clone() * i2.clone(), BigInt::from_str("152415777594878924352994968899710410").unwrap());
 		assert_eq!(&i1 * &i2, BigInt::from_str("152415777594878924352994968899710410").unwrap());
+		println!("/");
 		assert_eq!(i1.clone() / i2.clone(), BigInt::from_str("10").unwrap());
 		assert_eq!(&i1 / &i2, BigInt::from_str("10").unwrap()); // remember, it's integer division
+		println!("%");
 		assert_eq!(i1.clone() % i2.clone(), BigInt::from_str("82222222221").unwrap());
 		assert_eq!(&i1 % &i2, BigInt::from_str("82222222221").unwrap());
 		assert_eq!((i1.clone()/BigInt::from_i32(101)).to_string(), "12223444465224300");
 		assert_eq!((i1.clone() % BigInt::from_i32(101)).to_string(), "21");
+		println!("pow");
 		assert_eq!(BigInt::from_i32(101).pow(11).to_string(),"11156683466653165551101");
+		println!("== to i32 and i64");
 		assert_eq!(BigInt::from_i32(101), 101i32);
 		assert_ne!(BigInt::from_i32(100), 101i32);
 		assert_eq!(BigInt::from_i64(9223372036854775807i64), 9223372036854775807i64);

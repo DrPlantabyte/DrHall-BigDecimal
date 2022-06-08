@@ -291,9 +291,13 @@ impl Display for BigInt{
 		if !self.positive{
 			text.push('-');
 		}
-		for reverse_index in (0..digits.len()).rev() {
-			text.push(std::char::from_digit(digits[reverse_index] as u32, 10)
-				.ok_or(std::fmt::Error)?);
+		if self.digits.len() == 0{
+			text.push(std::char::from_digit(0, 10).ok_or(std::fmt::Error)?);
+		} else {
+			for reverse_index in (0..digits.len()).rev() {
+				text.push(std::char::from_digit(digits[reverse_index] as u32, 10)
+					.ok_or(std::fmt::Error)?);
+			}
 		}
 		f.write_str(text.as_ref())
 	}
@@ -551,7 +555,7 @@ impl BigInt {
 		let sign = a.positive == b.positive;
 		let mut a_digits = a.digits.clone();
 		let mut b_digits = b.digits.clone();
-		if a_digits.len() < 9 {
+		if (a_digits.len() as i64) < Self::BZ_DIV_LIMIT {
 			// small enough to use i64 integer division
 			let (q, r) = Self::simple_division_64bit(&a_digits, &b_digits);
 			return Ok((Self::from_i64(q).convert_sign(sign), Self::from_i64(r)));
@@ -631,6 +635,9 @@ division becomes a linear time algorithm in the number of blocks."
 				// make new double-block with remainder as upper digits
 				Z_double_block = Self::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
+			println!("\t\tQi = {:?}\n\t\tRi = {:?}\n\t\tQ = {:?}\n\t\tR = {:?}\n\t\tZ = {:?}\n",
+				Qi, Ri, Q, R, Z_double_block);// TODO:
+			// remove
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
@@ -643,11 +650,15 @@ division becomes a linear time algorithm in the number of blocks."
 
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
+		println!("{} / {}", BigInt{digits:a_digits.to_vec(), positive: true},
+				 BigInt{digits:b_digits.to_vec(), positive:  true}); // TODO: remove
 		let n = a_digits.len();
 		if (n as i64) < Self::BZ_DIV_LIMIT { // || n.is_odd() ?
 			let (q64, r64) = Self::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
 			let q = Self::i64_to_vec_u8(q64);
 			let r = Self::i64_to_vec_u8(r64);
+			println!("\t= ({} , {})", BigInt{digits:q.clone(), positive: true},
+					 BigInt{digits:r.clone(), positive:  true}); // TODO: remove
 			return (Self::left_pad(&q, n, 0u8), Self::left_pad(&r, n, 0u8));
 		} else {
 			let (b2, b1) = Self::slice2(b_digits);
@@ -658,6 +669,8 @@ division becomes a linear time algorithm in the number of blocks."
 			let (r2, r1) = Self::slice2(&r.digits);
 			let (q2, s) = Self::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
 			let q = Self::merge2(&q2.digits, &q1.digits);
+			println!("\t= ({} , {})", BigInt{digits:q.clone(), positive: true},
+					 BigInt{digits:s.digits.clone(), positive:  true}); // TODO: remove
 			return (q, s.digits);
 		}
 	}

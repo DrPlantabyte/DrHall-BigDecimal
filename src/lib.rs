@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::*;
 use std::borrow::Borrow;
 
-#[derive(Clone, Eq, PartialOrd, Debug)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct BigInt {
 	digits: Vec<u8>,
@@ -44,11 +44,13 @@ impl BigInt {
 		if self.digits.len() == 0 {
 			return &self.digits;
 		}
-		let mut i = self.digits.len()-1;
-		while i > 0 && self.digits[i] != 0u8 {
-			i -= 1;
+		for i in (0..self.digits.len()).rev(){
+			if self.digits[i] != 0u8 {
+				return &self.digits[0..i+1];
+			}
 		}
-		return &self.digits[0..i+1];
+		// all zeroes
+		return &self.digits[0..1];
 	}
 
 	pub fn pow(self, exponent: u64) -> Self {
@@ -192,7 +194,7 @@ impl BigInt {
 		if digits.len() == 1 {
 			return;
 		}
-		for i in (1..digits.len()).rev() {
+		for i in (0..digits.len()).rev() {
 			if digits[i] != 0u8 {
 				// [i] not zero, trim everything above i
 				digits.truncate(i+1);
@@ -320,6 +322,14 @@ impl PartialEq<&Self> for &BigInt {
 	}
 }
 
+impl Eq for BigInt{}
+
+impl PartialOrd<Self> for BigInt {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		return Some(self.cmp(other));
+	}
+}
+
 impl Ord for BigInt {
 	fn cmp(&self, other: &Self) -> Ordering {
 		if self.is_zero() && other.is_zero(){
@@ -329,12 +339,12 @@ impl Ord for BigInt {
 		let s2 = other.get_nonzero_slice();
 		let l1 = s1.len();
 		let l2= s2.len();
-		let len_cmp = l1.cmp(&l2);
+		let len_cmp = usize::cmp(&l1, &l2);
 		match len_cmp {
 			Ordering::Equal => {
 				for i in (0..l1).rev() {
 					if s1[i] != s2[i]{
-						return s1.cmp(&s2);
+						return s1[i].cmp(&s2[i]);
 					}
 				}
 				return Ordering::Equal;
@@ -520,7 +530,9 @@ impl Div for &BigInt {
 		if rhs.is_zero() {
 			panic!("attempt to divide by zero");
 		}
-		return self.checked_div_rem(&rhs).unwrap().0;
+		let q = self.checked_div_rem(&rhs).unwrap().0;
+		return q;
+		//return self.checked_div_rem(&rhs).unwrap().0;
 	}
 }
 impl Rem for &BigInt {
@@ -611,33 +623,31 @@ division becomes a linear time algorithm in the number of blocks."
 - Burnikel & Ziegler, 1998*/
 		// m is smallest power of 2 that is at least as big as the number of DIV_LIMIT blocks in B
 		// (m = 2^k)
-		let k = Self::log2_i64(s/Self::BZ_DIV_LIMIT);
-		if k > 62 { return Err(errors::MathError::new(&format!("cannot compute division because algorithm cannot handle {} digits", s)));}
+		let mut k: i64 = 0;//Self::log2_i64(1+(s-1)/Self::BZ_DIV_LIMIT);
+		while (1 << k) * BigInt::BZ_DIV_LIMIT <= s && k < 62 {k += 1;}
+		if k >= 62 { return Err(errors::MathError::new(&format!("cannot compute division because algorithm cannot handle {} digits", s)));}
 		let m = 1i64 << k; // m number of blocks
-		let j = (s+m - 1) / m; // j is size of smallest chunk in B to contain B using m blocks
+		let j = s / m; // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
-		let sigma = n-s; // sigma number of zeros to right-pad
+		let mut sigma: i64 = n-s; // sigma number of zeros to right-pad
 		let B = Self::left_shift(B, sigma as usize, 0u8);
 		let mut A = Self::left_shift(A, sigma as usize, 0u8);
-		let t = (1 + (r/n)).max(2); // tt is number of n-sized blocked needed to hold A with an extra 0 on the left
+		let t = (1 + (r/n)).max(2); // t is number of n-sized blocked needed to hold A with an extra 0 on the left
 		while (A.len() as i64) < t*n { // left-pad A with zeros
 			A.push(0u8);
 		}
 		let mut Z_double_block = A[((t-2)*n) as usize .. ((t)*n) as usize].to_vec(); // Z initialized as upper two blocks od A
 		let mut Q: Vec<u8> = Vec::with_capacity((r-s+1) as usize);
 		let mut R: Vec<u8> = Vec::with_capacity((s) as usize);
-		for i in (0..t-2).rev() {
+		for i in (0..t-1).rev() {
 			let (Qi, Ri) = Self::recursive_division(&Z_double_block, &B);
 			// push Qi to front of Q
 			Q = Self::merge2(&Qi, &Q);
 			R = Ri.clone();
 			if i > 0 {
-				// make new double-block with remainder as upper digits
+				// make new double-block with remainder as upper digits and next block from A as lower digits
 				Z_double_block = Self::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
-			println!("\t\tQi = {:?}\n\t\tRi = {:?}\n\t\tQ = {:?}\n\t\tR = {:?}\n\t\tZ = {:?}\n",
-				Qi, Ri, Q, R, Z_double_block);// TODO:
-			// remove
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
@@ -650,27 +660,21 @@ division becomes a linear time algorithm in the number of blocks."
 
 
 	fn recursive_division(a_digits: &[u8], b_digits: &[u8]) -> (Vec<u8>, Vec<u8>){
-		println!("{} / {}", BigInt{digits:a_digits.to_vec(), positive: true},
-				 BigInt{digits:b_digits.to_vec(), positive:  true}); // TODO: remove
-		let n = a_digits.len();
-		if (n as i64) < Self::BZ_DIV_LIMIT { // || n.is_odd() ?
+		let n = b_digits.len();
+		if (a_digits.len() as i64) < Self::BZ_DIV_LIMIT { // || n.is_odd() ?
 			let (q64, r64) = Self::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
 			let q = Self::i64_to_vec_u8(q64);
 			let r = Self::i64_to_vec_u8(r64);
-			println!("\t= ({} , {})", BigInt{digits:q.clone(), positive: true},
-					 BigInt{digits:r.clone(), positive:  true}); // TODO: remove
 			return (Self::left_pad(&q, n, 0u8), Self::left_pad(&r, n, 0u8));
 		} else {
 			let (b2, b1) = Self::slice2(b_digits);
 			let (a34, a12) = Self::slice2(a_digits);
 			let (a2, a1) = Self::slice2(a12);
 			let (a4, a3) = Self::slice2(a34);
-			let (q1, r) = Self::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
+			let (q2, r) = Self::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
 			let (r2, r1) = Self::slice2(&r.digits);
-			let (q2, s) = Self::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
+			let (q1, s) = Self::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
 			let q = Self::merge2(&q2.digits, &q1.digits);
-			println!("\t= ({} , {})", BigInt{digits:q.clone(), positive: true},
-					 BigInt{digits:s.digits.clone(), positive:  true}); // TODO: remove
 			return (q, s.digits);
 		}
 	}
@@ -2795,14 +2799,17 @@ mod tests {
 		assert_eq!(r, 61345995222320001i64 % 303761234517i64);
 		// n = 2011175439743600021634000000000000000000000000000586423463
 		let n = vec![3,6,4,3,2,4,6,8,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,6,1,2,0,0,0,6,3,4,7,9,3,4,5,7,1,1,1,0,2];
-		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![7,1]).unwrap().0,
-				   vec![3,3,7,3,8,0,5,0,5,6,7,1,1,4,9,2,5,3,2,8,8,5,0,7,4,6,7,1,1,4,9,2,5,3,2,8,0,6,8,1,7,4,6,7,9,1,3,6,7,3,4,4,0,3,8,1,1]);
+		let (mut q, mut r) = BigInt::burnikel_ziegler_division(&n, &vec![7,1]).unwrap();
+		BigInt::trim_leading_zeroes(&mut q);BigInt::trim_leading_zeroes(&mut r);
+		assert_eq!(q, vec![3,3,7,3,8,0,5,0,5,6,7,1,1,4,9,2,5,3,2,8,8,5,0,7,4,6,7,1,1,4,9,2,5,3,2,8,0,6,8,1,7,4,6,7,9,1,3,6,7,3,4,4,0,3,8,1,1]);
 		// divide by 17 = 118304437631976471860823529411764705882352941176505083733
-		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![7,1]).unwrap().1, vec![2]); // mod by 17 = 2
-		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![2,1,4,9,3,0,0,0,0,2,9,0,4,8,3,7,6,9,4,3,7,1]).unwrap().0,
+		assert_eq!(r, vec![2]); // mod by 17 = 2
+		let (mut q, mut r) = BigInt::burnikel_ziegler_division(&n, &vec![2,1,4,9,3,0,0,0,0,2,9,0,4,8,3,7,6,9,4,3,7,1]).unwrap();
+		BigInt::trim_leading_zeroes(&mut q);BigInt::trim_leading_zeroes(&mut r);
+		assert_eq!(q,
 				   vec![2,9,1,0,1,6,8,0,7,4,2,9,0,0,0,8,4,7,0,4,7,1,1,9,1,8,3,9,1,7,0,0,2,9,5,1,1]);
 		// divide by 1734967384092000039412 = 1159200719381911740748000924708610192
-		assert_eq!(BigInt::burnikel_ziegler_division(&n, &vec![2,1,4,9,3,0,0,0,0,2,9,0,4,8,3,7,6,9,4,3,7,1]).unwrap().1,
+		assert_eq!(r,
 				   vec![9,5,3,6,3,5,1,4,8,0,2,7,9,8,6,7,1,6,6,7,4,1]);
 		// mod by 1734967384092000039412 = 1476617689720841536359
 	}

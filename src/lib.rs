@@ -48,7 +48,7 @@ impl BigInt {
 		while i > 0 && self.digits[i] != 0u8 {
 			i -= 1;
 		}
-		return &self.digits[0..i];
+		return &self.digits[0..i+1];
 	}
 
 	pub fn pow(self, exponent: u64) -> Self {
@@ -2785,6 +2785,7 @@ mod tests {
 
 	#[test]
 	fn long_division_test_1() {
+		println!("testing long integer division...");
 		// remember, index 0 is ones' digit (least significant digit first, aka little-endian)
 		let (q, r) = BigInt::simple_division_64bit(&vec![1,2,3,4,6], &vec![3,0,3]);
 		assert_eq!(q, 64321i64 / 303i64);
@@ -2808,6 +2809,7 @@ mod tests {
 
 	#[test]
 	fn bigint_operator_test() {
+		println!("testing BigInt operators...");
 		let i1 = BigInt::from_str("1234567890987654321").unwrap();
 		let i2 = BigInt::from_str("0123456780876543210").unwrap();
 		println!("BigInt comparisons");

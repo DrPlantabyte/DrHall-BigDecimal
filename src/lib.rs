@@ -1,3 +1,4 @@
+//#![feature(backtrace)] // uncomment for debugging
 use std::fmt::{Debug, Formatter, Display};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
@@ -595,6 +596,11 @@ impl BigInt {
 			return Ok((vec![0u8], A.clone()));
 		}
 		/*
+A: [  _|___|___|___|___]     B: [ __]
+   |---| <- n                   |---| <- n = j * m
+   |-------------------| <- t * n
+_=j
+
 	"The main idea is to split up A into parts which are as long as B and to view these
 parts as (very large) digits. Then we can conceptually apply an ordinary school division
 to these large digits in which the base task of dividing two digits by one is carried out by
@@ -624,12 +630,16 @@ division becomes a linear time algorithm in the number of blocks."
 		// m is smallest power of 2 that is at least as big as the number of DIV_LIMIT blocks in B
 		// (m = 2^k)
 		let mut k: i64 = 0;//Self::log2_i64(1+(s-1)/Self::BZ_DIV_LIMIT);
-		while (1 << k) * BigInt::BZ_DIV_LIMIT <= s && k < 62 {k += 1;}
+		while (BigInt::BZ_DIV_LIMIT << k) <= s && k < 62 {k += 1;}
 		if k >= 62 { return Err(errors::MathError::new(&format!("cannot compute division because algorithm cannot handle {} digits", s)));}
 		let m = 1i64 << k; // m number of blocks
-		let j = s / m; // j is size of smallest chunk in B to contain B using m blocks
+		let j = 1+((s-1) / m); // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
 		let mut sigma: i64 = n-s; // sigma number of zeros to right-pad
+		// println!("dividing {:?} by {:?}",
+		// 		 A, B); // uncomment to debug division
+		// println!("r\ts\tk\tm\tj\tn\tsigma\n{}\t{}\t{}\t{}\t{}\t{}\t{}",
+		// 	r,s,k,m,j,n,sigma); // uncomment to debug division
 		let B = Self::left_shift(B, sigma as usize, 0u8);
 		let mut A = Self::left_shift(A, sigma as usize, 0u8);
 		let t = (1 + (r/n)).max(2); // t is number of n-sized blocked needed to hold A with an extra 0 on the left
@@ -648,6 +658,8 @@ division becomes a linear time algorithm in the number of blocks."
 				// make new double-block with remainder as upper digits and next block from A as lower digits
 				Z_double_block = Self::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
+			// println!("Qi\tRi\tQ\tR\tZi\n{:?}\t{:?}\t{:?}\t{:?}\t{:?}",
+			// 		 Qi,Ri,Q,R,Z_double_block); // uncomment to debug division
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
@@ -688,9 +700,9 @@ division becomes a linear time algorithm in the number of blocks."
 		let cnum = BigInt{digits: c, positive:true};
 		let a3num = BigInt{digits: a3.to_vec(), positive:true};
 		let d = &qnum*&b2num;
-		let mut r = (cnum*10i32 + a3num) - d;
+		let mut r = (cnum*BigInt::from_u8(10) + a3num) - d;
 		while !r.positive { // negative r means q too big
-			qnum -= 1i32;
+			qnum -= BigInt::one();
 			r += b.clone();
 		}
 		return (qnum.clone(), r);
@@ -1766,6 +1778,8 @@ impl Sub<BigInt> for i32 {
 }
 impl SubAssign<i32> for BigInt {
 	fn sub_assign(&mut self, rhs: i32) {
+		// use std::backtrace::Backtrace;
+		// println!("{}", Backtrace::force_capture());
 		todo!()
 	}
 }

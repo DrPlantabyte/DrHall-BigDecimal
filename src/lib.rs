@@ -578,6 +578,7 @@ impl BigInt {
 		//    ____
 		//  a) b
 		let (q, r) = Self::burnikel_ziegler_division(&a_digits, &b_digits)?;
+		println!("checked_div_rem({}, {}) -> ({:?}, {:?})", self, rhs, q, r); // uncomment to debug
 		return Ok((BigInt{digits: q, positive: sign}, BigInt{digits: r, positive: true}))
 	}
 
@@ -636,10 +637,10 @@ division becomes a linear time algorithm in the number of blocks."
 		let j = 1+((s-1) / m); // j is size of smallest chunk in B to contain B using m blocks
 		let n = j * m; // n total digits for B (right-pad with 0)
 		let mut sigma: i64 = n-s; // sigma number of zeros to right-pad
-		// println!("dividing {:?} by {:?}",
-		// 		 A, B); // uncomment to debug division
-		// println!("r\ts\tk\tm\tj\tn\tsigma\n{}\t{}\t{}\t{}\t{}\t{}\t{}",
-		// 	r,s,k,m,j,n,sigma); // uncomment to debug division
+		println!("dividing {:?} by {:?}",
+				 A, B); // uncomment to debug division
+		println!("r\ts\tk\tm\tj\tn\tsigma\n{}\t{}\t{}\t{}\t{}\t{}\t{}",
+			r,s,k,m,j,n,sigma); // uncomment to debug division
 		let B = Self::left_shift(B, sigma as usize, 0u8);
 		let mut A = Self::left_shift(A, sigma as usize, 0u8);
 		let t = (1 + (r/n)).max(2); // t is number of n-sized blocked needed to hold A with an extra 0 on the left
@@ -650,7 +651,12 @@ division becomes a linear time algorithm in the number of blocks."
 		let mut Q: Vec<u8> = Vec::with_capacity((r-s+1) as usize);
 		let mut R: Vec<u8> = Vec::with_capacity((s) as usize);
 		for i in (0..t-1).rev() {
+			println!("\ti {}\n\tZi {:?}",
+					 i,Z_double_block); // uncomment to debug division
 			let (Qi, Ri) = Self::recursive_division(&Z_double_block, &B);
+			assert_eq!(BigInt{digits: Z_double_block.clone(), positive: true},
+					   BigInt{digits: B.clone(), positive: true} * BigInt{digits: Qi.clone(), positive: true}
+						   + BigInt{digits: Ri.clone(), positive: true});// in-line unit test
 			// push Qi to front of Q
 			Q = Self::merge2(&Qi, &Q);
 			R = Ri.clone();
@@ -658,8 +664,8 @@ division becomes a linear time algorithm in the number of blocks."
 				// make new double-block with remainder as upper digits and next block from A as lower digits
 				Z_double_block = Self::merge2(&A[((i-1)*n) as usize .. ((i)*n) as usize], &Ri);
 			}
-			// println!("Qi\tRi\tQ\tR\tZi\n{:?}\t{:?}\t{:?}\t{:?}\t{:?}",
-			// 		 Qi,Ri,Q,R,Z_double_block); // uncomment to debug division
+			println!("\tQi {:?}\n\tRi {:?}\n\tQ {:?}\n\tR {:?}\n\tZi-1 {:?}\n",
+					 Qi,Ri,Q,R,Z_double_block); // uncomment to debug division
 		}
 		// right-shift remainder back
 		let mut R: Vec<u8> = R[sigma as usize..].to_vec();
@@ -677,6 +683,8 @@ division becomes a linear time algorithm in the number of blocks."
 			let (q64, r64) = Self::simple_division_64bit(&a_digits.to_vec(), &b_digits.to_vec());
 			let q = Self::i64_to_vec_u8(q64);
 			let r = Self::i64_to_vec_u8(r64);
+			println!("recursive_division({:?}, {:?} -> ({:?}, {:?})",
+					a_digits, b_digits, Self::left_pad(&q, n, 0u8), Self::left_pad(&r, n, 0u8)); // uncomment to debug division
 			return (Self::left_pad(&q, n, 0u8), Self::left_pad(&r, n, 0u8));
 		} else {
 			let (b2, b1) = Self::slice2(b_digits);
@@ -684,14 +692,17 @@ division becomes a linear time algorithm in the number of blocks."
 			let (a2, a1) = Self::slice2(a12);
 			let (a4, a3) = Self::slice2(a34);
 			let (q2, r) = Self::div_three_long_halves_by_two(a1, a2, a3, b1, b2);
-			let (r2, r1) = Self::slice2(&r.digits);
+			let (r2, r1) = Self::slice2(&r);
 			let (q1, s) = Self::div_three_long_halves_by_two(r1, r2, a4, b1, b2);
-			let q = Self::merge2(&q2.digits, &q1.digits);
-			return (q, s.digits);
+			let q = Self::merge2(&q2, &q1);
+			println!("recursive_division({:?}, {:?} -> ({:?}, {:?})",
+					 a_digits, b_digits, q, s); // uncomment to debug division
+			return (q, s);
 		}
 	}
 	fn div_three_long_halves_by_two(a1: &[u8], a2: &[u8], a3: &[u8], b1: &[u8], b2: &[u8])
-			-> (BigInt, BigInt) {
+			-> (Vec<u8>, Vec<u8>) {
+		let n = b2.len(); // number of digits
 		let a12 = Self::merge2(a2, a1);
 		let b = BigInt{digits: Self::merge2(b2, b1), positive: true};
 		let (mut q, mut c) = Self::recursive_division(&a12, b1);
@@ -705,7 +716,9 @@ division becomes a linear time algorithm in the number of blocks."
 			qnum -= BigInt::one();
 			r += b.clone();
 		}
-		return (qnum.clone(), r);
+		while qnum.digits.len() < n {qnum.digits.push(0u8);}
+		while r.digits.len() < n {r.digits.push(0u8);}
+		return (qnum.digits[0..n].to_vec(), r.digits[0..n].to_vec());
 	}
 
 	fn left_shift(v: &Vec<u8>, pad_count: usize, pad: u8) -> Vec<u8> {
